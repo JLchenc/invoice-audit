@@ -26,6 +26,8 @@ export interface PdfPreviewProps {
   height?: number;
   /** 是否显示工具栏，默认 true */
   toolbar?: boolean;
+  /** 是否显示底部说明，默认 true */
+  showHint?: boolean;
   /** 紧凑模式：只渲染第一页作为缩略图，不显示工具栏 */
   thumb?: boolean;
   /** 文件名，用于标题展示 */
@@ -46,6 +48,7 @@ export default function PdfPreview({
   file,
   height = 460,
   toolbar = true,
+  showHint = true,
   thumb = false,
   fileName,
   onPageChange,
@@ -62,9 +65,14 @@ export default function PdfPreview({
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(() => setContainerWidth(el.clientWidth));
+    const measure = () => {
+      const w = el.clientWidth;
+      // 只在真正变化时更新，避免无意义重渲染
+      setContainerWidth((prev) => (Math.abs(prev - w) >= 1 ? w : prev));
+    };
+    const ro = new ResizeObserver(measure);
     ro.observe(el);
-    setContainerWidth(el.clientWidth);
+    measure();
     return () => ro.disconnect();
   }, []);
 
@@ -106,7 +114,7 @@ export default function PdfPreview({
     </div>
   ) : (
     <div style={{ display: 'grid', placeItems: 'center', height, color: 'rgba(0,0,0,.45)' }}>
-      <Space direction="vertical" align="center" size={8}>
+      <Space orientation="vertical" align="center" size={8}>
         <Spin />
         <span style={{ fontSize: 12 }}>正在解析票据…</span>
       </Space>
@@ -140,7 +148,10 @@ export default function PdfPreview({
   );
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, height: thumb ? '100%' : '100%', ...style }}>
+    // minWidth: 0 + overflow: hidden 必须保留：
+    // flex 子项默认 min-width:auto（= 内容最小宽度），canvas 会把祖先撑开，
+    // 而 canvas 宽度又来自对祖先的测量 —— 会形成正反馈死循环（实测宽度在 300~930 之间震荡）
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, minWidth: 0, overflow: 'hidden', height: thumb ? '100%' : '100%', ...style }}>
       {toolbar && !thumb && (
         <div
           style={{
@@ -222,7 +233,7 @@ export default function PdfPreview({
         </Document>
       </div>
 
-      {!thumb && (
+      {showHint && !thumb && (
         <Alert
           type="info"
           showIcon={false}

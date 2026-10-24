@@ -97,20 +97,32 @@ export interface DashboardData {
   evalDigest: EvalDigest;
 }
 
+/** 单据来源 */
+export type DocSource = 'upload' | 'scheduled' | 'email' | 'scan';
+
+/** 单据处理状态（对应 Worker 回写） */
+export type DocProcessStatus = 'pending' | 'processing' | 'matched' | 'review' | 'exception' | 'failed';
+
 /** 扫描件池 */
 export interface ScannedDoc {
   id: string;
   fileName: string;
   pages: number;
-  source: string;
-  ocrStatus: 'done' | 'processing' | 'failed';
-  ocrConfidence: number;
+  source: DocSource;
+  /** 处理状态 */
+  status: DocProcessStatus;
+  /** 已重试次数（处理失败 3 次进异常池） */
+  retryCount: number;
+  /** 票据 PDF 文件名（位于 data/invoices/） */
+  pdfFile: string;
   linkedDocNo: string;
   vendor: string;
   amount: number;
   uploadedAt: string;
-  /** 票据 PDF 文件名（位于 data/invoices/） */
-  pdfFile: string;
+  /** 关联 trace 短号 */
+  traceId?: string;
+  /** 关联复核详情（与复核工作台复用同一组件） */
+  detailId?: string;
 }
 
 /** 规则配置 */

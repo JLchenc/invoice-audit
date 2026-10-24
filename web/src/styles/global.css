@@ -206,6 +206,50 @@ body {
   box-shadow: inset 0 0 0 1px rgba(22, 119, 255, 0.18);
 }
 
+/* 可点击行（扫描件池：点行跳单据详情） */
+.ia-row-clickable {
+  cursor: pointer;
+}
+
+/* ============ 侧边栏品牌区 ============ */
+/* 渐变 Logo 标：蓝→紫对角渐变 + 内高光 + 外发光 */
+.ia-logo-mark {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  font-size: 19px;
+  color: #fff;
+  background: linear-gradient(135deg, #1677ff 0%, #7c5cff 100%);
+  box-shadow:
+    0 4px 14px rgba(83, 92, 255, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+
+/* 数字员工徽章：胶囊 chip，浅白描边 */
+.ia-worker-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.78);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.ia-worker-chip .ia-dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+}
+
 /* ============ 表格行高亮 ============ */
 .ia-row-low-conf > td {
   background: #fff7e6 !important;
@@ -241,32 +285,24 @@ body {
   box-shadow: inset 0 0 24px rgba(22, 119, 255, 0.12);
 }
 
-/* ============ 发票原图占位：扫描线动效 ============ */
-.ia-scan {
-  position: relative;
-  overflow: hidden;
-  border: 1px dashed rgba(22, 119, 255, 0.45);
-  border-radius: 6px;
-  background: linear-gradient(180deg, #f7fbff, #eef4fb);
+/* ============ PDF 预览（react-pdf / pdf.js） ============ */
+.ia-pdf-page {
+  max-width: 100%;
 }
 
-.ia-scan::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 34%;
-  background: linear-gradient(180deg, transparent, rgba(22, 119, 255, 0.16), transparent);
-  animation: ia-scan-move 3.2s linear infinite;
+.ia-pdf-page canvas {
+  display: block;
+  box-shadow: 0 2px 12px rgba(16, 24, 40, 0.14);
 }
 
-@keyframes ia-scan-move {
-  0% {
-    top: -34%;
-  }
-  100% {
-    top: 100%;
-  }
+/* 文本层：允许选中复制票面文字 */
+.ia-pdf-page .react-pdf__Page__textContent {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.ia-pdf-page .react-pdf__Page__annotations {
+  pointer-events: auto;
 }
 
 /* ============ kbd ============ */
@@ -301,8 +337,7 @@ kbd {
   background: transparent;
 }
 
-/* ============ Ant Design X 组件微调 ============ */
-.ant-thought-chain {
+/* ============ Ant Design X 组件微调 ============ */.ant-thought-chain {
   font-size: 12px;
 }
 

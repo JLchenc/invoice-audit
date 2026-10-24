@@ -1,20 +1,23 @@
 import { pdfjs } from 'react-pdf';
-import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
 /**
  * pdf.js 全局配置。
  *
- * - worker：Vite 用 `?url` 把 worker 作为静态资源打包，避免运行时去 node_modules 找文件
- * - cMap / standardFontDataUrl：指向 public/pdfjs/（由 scripts/copy-pdfjs-assets.mjs 拷贝），
- *   中文发票 PDF 依赖 CMap 做字符映射，缺失会导致中文变方块
+ * worker / cMap / standardFontDataUrl 全部指向 public/pdfjs/
+ * （由 scripts/copy-pdfjs-assets.mjs 在 npm install 时生成）。
+ *
+ * 不走 node_modules 路径的原因：
+ * 1. Vite dev 会把 /node_modules 下的 worker 内联 sourcemap，体积涨到 6MB+；
+ * 2. module worker 从 node_modules 路径加载在 dev 下不可靠；
+ * 3. public/ 在 dev 与 build 下行为一致，且中文发票依赖 CMap 做字符映射，
+ *    缺失会导致中文变方块。
  */
-pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
+pdfjs.GlobalWorkerOptions.workerSrc = '/pdfjs/pdf.worker.min.mjs';
 
 export const PDFJS_OPTIONS = {
   cMapUrl: '/pdfjs/cmaps/',
   cMapPacked: true,
   standardFontDataUrl: '/pdfjs/standard_fonts/',
-  imageDecodersUrl: '/pdfjs/image_decoders/',
 } as const;
 
 export const PDFJS_VERSION = pdfjs.version;

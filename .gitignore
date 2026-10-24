@@ -9,6 +9,9 @@ data/*
 *.pyc
 .venv/
 __pycache__/
+.pytest_cache/
+.ruff_cache/
+*.db
 
 # 前端
 node_modules/

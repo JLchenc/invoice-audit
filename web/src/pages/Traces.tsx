@@ -194,7 +194,7 @@ export default function Traces() {
               </div>
 
               <Steps
-                direction="vertical"
+                orientation="vertical"
                 size="small"
                 current={current.steps.length}
                 items={current.steps.map((s) => ({

@@ -35,7 +35,7 @@ export default function Providers() {
       render: (v: string) => (
         <Space size={6}>
           <Mono>{v}</Mono>
-          <Tag bordered={false} style={{ background: '#fafafa', color: 'rgba(0,0,0,.45)', borderRadius: 4, marginInlineEnd: 0 }}>
+          <Tag variant="filled" style={{ background: '#fafafa', color: 'rgba(0,0,0,.45)', borderRadius: 4, marginInlineEnd: 0 }}>
             <LockOutlined style={{ marginRight: 4 }} />
             已加密
           </Tag>

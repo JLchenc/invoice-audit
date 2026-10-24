@@ -86,35 +86,48 @@ export default function BasicLayout() {
           className="ia-scroll"
           style={{ overflow: 'auto', background: TECH.gradientDark, boxShadow: '4px 0 24px rgba(0, 21, 41, 0.18)' }}
         >
-          {/* Logo */}
-          <Tooltip title={collapsed ? undefined : 'AP-001 · 应付核算'} placement="right">
-            <Link
-              to="/review"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                height: 46,
-                padding: collapsed ? '0 15px' : '0 12px',
-                color: '#fff',
-                borderBottom: '1px solid rgba(255,255,255,.08)',
-              }}
-            >
-              <Badge dot color={TECH.aiAccent} offset={[-2, 8]}>
-                <AuditOutlined style={{ fontSize: 18, color: '#69b1ff' }} />
-              </Badge>
-              {!collapsed && (
-                <div style={{ lineHeight: 1.2, overflow: 'hidden' }}>
-                  <div className="ia-gradient-text" style={{ fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' }}>
-                    发票智审 InvoiceAudit
+          {/* 品牌区：渐变 Logo 标 + 主副标题 + 数字员工徽章 */}
+          <div
+            style={{
+              padding: collapsed ? '14px 0 12px' : '14px 14px 12px',
+              borderBottom: '1px solid rgba(255,255,255,.08)',
+            }}
+          >
+            <Tooltip title={collapsed ? 'AP-001 · 应付核算数字员工' : undefined} placement="right">
+              <Link
+                to="/review"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  justifyContent: collapsed ? 'center' : 'flex-start',
+                }}
+              >
+                <span className="ia-logo-mark">
+                  <AuditOutlined />
+                </span>
+                {!collapsed && (
+                  <div style={{ lineHeight: 1.25, minWidth: 0 }}>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: '#fff', letterSpacing: 2, whiteSpace: 'nowrap' }}>
+                      发票智审
+                    </div>
+                    <div
+                      className="ia-gradient-text"
+                      style={{ fontSize: 11, fontWeight: 600, letterSpacing: 1.5, whiteSpace: 'nowrap' }}
+                    >
+                      INVOICE AUDIT
+                    </div>
                   </div>
-                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,.45)', whiteSpace: 'nowrap' }}>
-                    AP-001 · 应付核算
-                  </div>
-                </div>
-              )}
-            </Link>
-          </Tooltip>
+                )}
+              </Link>
+            </Tooltip>
+            {!collapsed && (
+              <div className="ia-worker-chip" style={{ marginTop: 10 }}>
+                <span className="ia-dot" style={{ background: '#52c41a' }} />
+                AP-001 · 应付核算数字员工
+              </div>
+            )}
+          </div>
 
           <Menu
             theme="dark"
@@ -140,8 +153,8 @@ export default function BasicLayout() {
             >
               <Space size={6}>
                 <span className="ia-dot ia-dot-ai" style={{ background: TECH.aiAccent }} />
-                <span style={{ fontSize: 11, color: 'rgba(255,255,255,.65)' }}>AI 引擎</span>
-                <Mono style={{ fontSize: 11, color: '#a5dcff' }}>qwen-max · 1180ms</Mono>
+                <span style={{ fontSize: 12, color: 'rgba(255,255,255,.65)' }}>AI 引擎</span>
+                <Mono style={{ fontSize: 12, color: '#a5dcff' }}>qwen-max · 1180ms</Mono>
               </Space>
             </div>
           )}
@@ -177,15 +190,15 @@ export default function BasicLayout() {
             <Breadcrumb
               items={[
                 { title: <a onClick={() => navigate('/review')}>发票智审</a> },
-                { title: <span style={{ fontSize: 12 }}>{title}</span> },
+                { title: <span style={{ fontSize: 13 }}>{title}</span> },
               ]}
             />
 
             <Space size={14}>
-              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              <Typography.Text type="secondary" style={{ fontSize: 13 }}>
                 后端路由 <Mono>{NAV_ENDPOINTS[location.pathname] ?? '/api/review-queue'}</Mono>
               </Typography.Text>
-              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              <Typography.Text type="secondary" style={{ fontSize: 13 }}>
                 数据截止 <Mono>2026-10-24 09:15:22</Mono>
               </Typography.Text>
               <Button
@@ -198,7 +211,7 @@ export default function BasicLayout() {
               >
                 AI 助手
               </Button>
-              <Avatar size={26} style={{ background: COLOR.primary, fontSize: 11 }}>
+              <Avatar size={28} style={{ background: COLOR.primary, fontSize: 12 }}>
                 AP
               </Avatar>
             </Space>

@@ -7,8 +7,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "postinstall": "node scripts/copy-pdfjs-assets.mjs",
-    "mock:pdf": "node scripts/gen-mock-invoice-pdf.mjs"
+    "postinstall": "node scripts/copy-pdfjs-assets.mjs"
   },
   "dependencies": {
     "@ant-design/icons": "^6.3.4",
@@ -16,7 +15,7 @@
     "@antv/g2plot": "^2.4.35",
     "antd": "^6.6.7",
     "dayjs": "^1.11.13",
-    "pdfjs-dist": "^4.10.38",
+    "pdfjs-dist": "4.8.69",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-pdf": "^9.2.1",

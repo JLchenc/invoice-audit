@@ -1,33 +1,157 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Alert, Button, Card, Col, Drawer, Empty, Input, Row, Segmented, Select, Space, Table, Typography, message } from 'antd';
+import {
+  Alert,
+  Button,
+  Card,
+  Col,
+  Empty,
+  Input,
+  Modal,
+  Progress,
+  Row,
+  Segmented,
+  Select,
+  Space,
+  Table,
+  Tooltip,
+  Typography,
+  Upload,
+  message,
+} from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { ExportOutlined, FileTextOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons';
+import type { UploadFile, UploadProps } from 'antd';
+import {
+  CloudUploadOutlined,
+  ExportOutlined,
+  FileTextOutlined,
+  InboxOutlined,
+  ReloadOutlined,
+  SearchOutlined,
+} from '@ant-design/icons';
 import Mono from '@/components/Mono';
-import { ConfidenceTag, OcrStatusTag } from '@/components/tags';
-import { fetchDocuments } from '@/api';
-import { ocrTextSample } from '@/mock/documents';
-import type { ScannedDoc } from '@/types';
-import { formatMoney, isLowConfidence } from '@/utils/format';
+import InvoiceDetailPanel from '@/components/InvoiceDetailPanel';
+import { SemanticTag } from '@/components/tags';
+import { getReviewDetail } from '@/mock/review';
+import { SOURCE_LABEL, STATUS_LABEL, ocrTextSample, scannedDocs } from '@/mock/documents';
+import type { DocProcessStatus, DocSource, ScannedDoc } from '@/types';
+import { formatMoney } from '@/utils/format';
+import { invoiceUrl } from '@/utils/invoice';
+
+const { Dragger } = Upload;
+
+const STATUS_ORDER: DocProcessStatus[] = ['pending', 'processing', 'matched', 'review', 'exception', 'failed'];
+
+const SOURCE_OPTIONS: { value: DocSource; label: string }[] = [
+  { value: 'upload', label: SOURCE_LABEL.upload },
+  { value: 'scheduled', label: SOURCE_LABEL.scheduled },
+  { value: 'email', label: SOURCE_LABEL.email },
+  { value: 'scan', label: SOURCE_LABEL.scan },
+];
+
+/** 处理链路（与设计稿一致） */
+const PIPELINE: { label: string; detail: string }[] = [
+  { label: 'POST /api/documents', detail: 'multipart 上传' },
+  { label: 'app.invoice_documents', detail: '文档落库' },
+  { label: 'Redis 队列', detail: "status=pending, source='upload'" },
+  { label: 'Worker L1 版面解析', detail: '本地 OCR' },
+  { label: 'L2 字段抽取', detail: 'LLM' },
+  { label: 'L3 勾稽', detail: '价税合计校验' },
+  { label: 'L4 三单匹配', detail: '发票 / PO / GRN' },
+  { label: 'L5 分流', detail: 'matched / review / exception' },
+  { label: '状态回写 + trace', detail: 'ctrl.trace_records' },
+];
+
+const STATUS_TAG: Record<DocProcessStatus, 'disabled' | 'info' | 'success' | 'warning' | 'error'> = {
+  pending: 'disabled',
+  processing: 'info',
+  matched: 'success',
+  review: 'warning',
+  exception: 'error',
+  failed: 'error',
+};
 
 export default function Documents() {
   const navigate = useNavigate();
-  const [list, setList] = useState<ScannedDoc[]>([]);
+  const [list, setList] = useState<ScannedDoc[]>(scannedDocs);
   const [keyword, setKeyword] = useState('');
-  const [status, setStatus] = useState<'全部' | ScannedDoc['ocrStatus']>('全部');
-  const [source, setSource] = useState<string | undefined>(undefined);
-  const [preview, setPreview] = useState<ScannedDoc | null>(null);
+  const [status, setStatus] = useState<'全部' | DocProcessStatus>('全部');
+  const [source, setSource] = useState<DocSource | undefined>(undefined);
+  const [uploads, setUploads] = useState<UploadFile[]>([]);
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const seq = useRef(100);
 
-  useEffect(() => {
-    fetchDocuments().then(setList);
-  }, []);
+  /* ---------- 上传：模拟进度 + 入池 + 走处理链路 ---------- */
+  const customRequest: UploadProps['customRequest'] = (options) => {
+    const { file, onProgress, onSuccess, onError } = options;
+    let percent = 0;
+    const timer = window.setInterval(() => {
+      percent = Math.min(96, percent + 8 + Math.random() * 14);
+      onProgress?.({ percent });
+      if (percent >= 96) {
+        window.clearInterval(timer);
+        onProgress?.({ percent: 100 });
+        onSuccess?.({}, new XMLHttpRequest());
+      }
+    }, 140);
+    void file;
+    void onError;
+  };
 
-  const sources = useMemo(() => Array.from(new Set(list.map((d) => d.source))), [list]);
+  const handleUploadChange: UploadProps['onChange'] = ({ fileList }) => {
+    setUploads(fileList.slice(-4));
 
+    fileList
+      .filter((f) => f.status === 'done' && f.percent === 100)
+      .forEach((f) => {
+        setList((prev) => {
+          if (prev.some((d) => d.fileName === f.name)) return prev;
+          seq.current += 1;
+          const id = `u${seq.current}`;
+          const doc: ScannedDoc = {
+            id,
+            fileName: f.name,
+            pages: 1,
+            source: 'upload',
+            status: 'pending',
+            retryCount: 0,
+            pdfFile: 'INV-2026-0001.pdf',
+            linkedDocNo: `REQ-20261024-${String(seq.current).padStart(4, '0')}`,
+            vendor: '待识别',
+            amount: 0,
+            uploadedAt: new Date().toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-'),
+            traceId: `tr-9f4${String(seq.current).padStart(3, '0')}`,
+            detailId: 'q1',
+          };
+          // 模拟 Worker 处理：pending → processing → 分流
+          window.setTimeout(() => setList((p) => p.map((d) => (d.id === id ? { ...d, status: 'processing' } : d))), 900);
+          window.setTimeout(() => {
+            const outcomes: DocProcessStatus[] = ['matched', 'review', 'exception'];
+            const final = outcomes[Math.floor(Math.random() * outcomes.length)];
+            setList((p) =>
+              p.map((d) =>
+                d.id === id
+                  ? {
+                      ...d,
+                      status: final,
+                      vendor: '上海岑川商贸有限公司',
+                      amount: 107168.54,
+                    }
+                  : d,
+              ),
+            );
+            message.success(`${f.name} 处理完成：${STATUS_LABEL[final]}`);
+          }, 3200);
+          return [doc, ...prev];
+        });
+      });
+  };
+
+  /* ---------- 筛选 ---------- */
   const filtered = useMemo(
     () =>
       list.filter((d) => {
-        if (status !== '全部' && d.ocrStatus !== status) return false;
+        if (status !== '全部' && d.status !== status) return false;
         if (source && d.source !== source) return false;
         if (keyword.trim()) {
           const k = keyword.trim().toLowerCase();
@@ -38,14 +162,53 @@ export default function Documents() {
     [list, keyword, status, source],
   );
 
+  const stuckFailed = list.filter((d) => d.status === 'failed' && d.retryCount >= 3);
+  const counts = useMemo(() => {
+    const acc: Record<string, number> = {};
+    list.forEach((d) => {
+      acc[d.status] = (acc[d.status] ?? 0) + 1;
+    });
+    return acc;
+  }, [list]);
+
+  const retryStuck = () => {
+    setList((prev) =>
+      prev.map((d) => (d.status === 'failed' && d.retryCount >= 3 ? { ...d, status: 'pending', retryCount: 0 } : d)),
+    );
+    message.success(`已将 ${stuckFailed.length} 个异常单据重新入队`);
+  };
+
+  const detail = detailId ? getReviewDetail(detailId) : null;
+
+  /**
+   * 行点击进详情。
+   * 注意：antd 6 的 Table 已移除 onRow / onCell（类型仍保留但运行时不生效），
+   * 这里用事件委托 + rc-table 渲染的 data-row-key 来实现。
+   */
+  const tableRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = tableRef.current;
+    if (!el) return;
+    const onClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.closest('button, a, input')) return; // 按钮/链接自行处理
+      const tr = target.closest('tr[data-row-key]');
+      if (!tr) return;
+      const doc = list.find((d) => d.id === tr.getAttribute('data-row-key'));
+      if (doc?.detailId) setDetailId(doc.detailId);
+    };
+    el.addEventListener('click', onClick);
+    return () => el.removeEventListener('click', onClick);
+  }, [list]);
+
   const columns: ColumnsType<ScannedDoc> = [
     {
       title: '文件',
       dataIndex: 'fileName',
       key: 'fileName',
-      width: 260,
+      width: 220,
       ellipsis: true,
-      render: (v: string, row) => (
+      render: (v: string, row: ScannedDoc) => (
         <Space size={6}>
           <FileTextOutlined style={{ color: '#1677ff' }} />
           <Mono title={v}>{v}</Mono>
@@ -53,44 +216,61 @@ export default function Documents() {
         </Space>
       ),
     },
-    { title: '来源', dataIndex: 'source', key: 'source', width: 170, ellipsis: true },
-    { title: 'OCR 状态', dataIndex: 'ocrStatus', key: 'ocrStatus', width: 96, render: (v: ScannedDoc['ocrStatus']) => <OcrStatusTag status={v} /> },
     {
-      title: '识别置信度',
-      dataIndex: 'ocrConfidence',
-      key: 'ocrConfidence',
+      title: '来源',
+      dataIndex: 'source',
+      key: 'source',
       width: 96,
-      align: 'right',
-      render: (v: number, row) => (row.ocrStatus === 'processing' ? <span style={{ color: 'rgba(0,0,0,.45)' }}>—</span> : <ConfidenceTag confidence={v} />),
+      render: (v: DocSource) => <span style={{ fontSize: 12 }}>{SOURCE_LABEL[v]}</span>,
+    },
+    {
+      title: '状态',
+      dataIndex: 'status',
+      key: 'status',
+      width: 104,
+      render: (v: DocProcessStatus, row: ScannedDoc) => (
+        <Space size={4}>
+          <SemanticTag semantic={STATUS_TAG[v]}>{STATUS_LABEL[v]}</SemanticTag>
+          {v === 'failed' && row.retryCount > 0 && (
+            <Tooltip title={`已重试 ${row.retryCount} 次`}>
+              <Mono style={{ fontSize: 11, color: 'rgba(0,0,0,.45)' }}>×{row.retryCount}</Mono>
+            </Tooltip>
+          )}
+        </Space>
+      ),
     },
     { title: '关联单据', dataIndex: 'linkedDocNo', key: 'linkedDocNo', width: 150, render: (v: string) => <Mono>{v}</Mono> },
     { title: '销方', dataIndex: 'vendor', key: 'vendor', ellipsis: true },
-    { title: '金额', dataIndex: 'amount', key: 'amount', width: 110, align: 'right', render: (v: number) => (v ? <Mono>{formatMoney(v)}</Mono> : <span style={{ color: 'rgba(0,0,0,.45)' }}>—</span>) },
-    { title: '上传时间', dataIndex: 'uploadedAt', key: 'uploadedAt', width: 132, render: (v: string) => <Mono>{v}</Mono> },
     {
-      title: '操作',
-      key: 'ops',
-      width: 150,
+      title: '金额',
+      dataIndex: 'amount',
+      key: 'amount',
+      width: 112,
+      align: 'right',
+      render: (v: number) => (v ? <Mono>{formatMoney(v)}</Mono> : <span style={{ color: 'rgba(0,0,0,.45)' }}>—</span>),
+    },
+    { title: '上传时间', dataIndex: 'uploadedAt', key: 'uploadedAt', width: 140, render: (v: string) => <Mono>{v}</Mono> },
+    {
+      title: '处理结果',
+      key: 'result',
+      width: 120,
       fixed: 'right',
-      render: (_, row) => (
+      render: (_: unknown, row: ScannedDoc) => (
         <Space size={4}>
-          <Button type="link" size="small" style={{ padding: 0 }} onClick={() => setPreview(row)}>
-            预览
-          </Button>
           <Button
             type="link"
             size="small"
             style={{ padding: 0 }}
-            onClick={() => {
-              setList((prev) => prev.map((d) => (d.id === row.id ? { ...d, ocrStatus: 'processing', ocrConfidence: 0 } : d)));
-              message.success('已重新提交识别，预计 30 秒完成');
-            }}
+            disabled={row.status === 'pending' || row.status === 'processing'}
+            onClick={() => setDetailId(row.detailId ?? 'q1')}
           >
-            重新识别
+            查看结果
           </Button>
-          <Button type="link" size="small" style={{ padding: 0 }} onClick={() => navigate('/traces')}>
-            链路
-          </Button>
+          {row.traceId && (
+            <Button type="link" size="small" style={{ padding: 0 }} onClick={() => navigate('/traces')}>
+              链路
+            </Button>
+          )}
         </Space>
       ),
     },
@@ -98,7 +278,109 @@ export default function Documents() {
 
   return (
     <div className="page-root">
-      {/* 筛选 */}
+      {/* ---------- 上传区 ---------- */}
+      <Card
+        className="ia-card"
+        size="small"
+        title={
+          <Space size={8}>
+            <CloudUploadOutlined style={{ color: '#1677ff' }} />
+            <span style={{ fontSize: 13 }}>上传票据</span>
+            <span className="ia-badge-ai">前端传入入口</span>
+          </Space>
+        }
+        styles={{ body: { padding: 12 } }}
+      >
+        <Dragger
+          multiple
+          accept=".pdf"
+          showUploadList={false}
+          customRequest={customRequest}
+          onChange={handleUploadChange}
+          style={{ background: 'linear-gradient(180deg,#f7fbff,#eef4fb)', borderColor: 'rgba(22,119,255,.4)' }}
+        >
+          <p className="ant-upload-drag-icon">
+            <InboxOutlined style={{ color: '#1677ff' }} />
+          </p>
+          <p className="ant-upload-text" style={{ fontSize: 13 }}>
+            点击或拖拽 PDF 到此处上传
+          </p>
+          <p className="ant-upload-hint" style={{ fontSize: 12 }}>
+            支持多选 · 单文件 ≤ 20MB · 上传后自动进入 Redis 队列并由 Worker 异步处理
+          </p>
+        </Dragger>
+
+        {uploads.length > 0 && (
+          <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {uploads.map((f) => (
+              <div key={f.uid} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <Mono style={{ fontSize: 12, width: 220 }} title={f.name}>
+                  {f.name}
+                </Mono>
+                <Progress
+                  percent={Math.round(f.percent ?? 0)}
+                  size="small"
+                  style={{ flex: 1, marginBottom: 0 }}
+                  strokeColor={f.status === 'error' ? '#ff4d4f' : '#1677ff'}
+                />
+                <span style={{ fontSize: 11, color: 'rgba(0,0,0,.45)', width: 56 }}>
+                  {f.status === 'error' ? '失败' : f.status === 'done' ? '已入队' : '上传中'}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      {/* ---------- 处理链路 ---------- */}
+      <Card
+        className="ia-card ia-card-ai"
+        size="small"
+        title={
+          <Space size={8}>
+            <span style={{ fontSize: 13 }}>处理链路</span>
+            <span style={{ fontSize: 11, color: 'rgba(0,0,0,.45)' }}>上传后单据在系统里的完整流向</span>
+          </Space>
+        }
+        styles={{ body: { padding: 12 } }}
+      >
+        <div className="ia-scroll" style={{ display: 'flex', alignItems: 'center', gap: 6, overflowX: 'auto', paddingBottom: 4 }}>
+          {PIPELINE.map((p, i) => (
+            <div key={p.label} style={{ display: 'flex', alignItems: 'center', gap: 6, flex: '0 0 auto' }}>
+              <div
+                style={{
+                  padding: '4px 10px',
+                  borderRadius: 6,
+                  background: '#ffffff',
+                  border: '1px solid #d6caff',
+                  boxShadow: '0 1px 4px rgba(124,92,255,.10)',
+                }}
+              >
+                <Mono style={{ fontSize: 12, color: '#5b3fd6' }}>{p.label}</Mono>
+                <div style={{ fontSize: 10, color: 'rgba(0,0,0,.45)' }}>{p.detail}</div>
+              </div>
+              {i < PIPELINE.length - 1 && <span style={{ color: '#7c5cff', fontSize: 12 }}>→</span>}
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* ---------- 异常池提示 ---------- */}
+      {stuckFailed.length > 0 && (
+        <Alert
+          type="warning"
+          showIcon
+          message={`异常池：${stuckFailed.length} 个单据处理失败已达 3 次`}
+          description="系统不会再自动重试，需人工确认文件后手动重入队；连续失败通常是扫描件模糊或缺页导致。"
+          action={
+            <Button size="small" icon={<ReloadOutlined />} onClick={retryStuck}>
+              批量重入队
+            </Button>
+          }
+        />
+      )}
+
+      {/* ---------- 筛选 ---------- */}
       <Card className="ia-card" size="small" styles={{ body: { padding: 12 } }}>
         <Row gutter={[12, 12]} align="middle">
           <Col flex="260px">
@@ -113,12 +395,10 @@ export default function Documents() {
           <Col>
             <Segmented
               value={status}
-              onChange={(v) => setStatus(v as '全部' | ScannedDoc['ocrStatus'])}
+              onChange={(v) => setStatus(v as '全部' | DocProcessStatus)}
               options={[
-                { label: '全部', value: '全部' },
-                { label: '已识别', value: 'done' },
-                { label: '识别中', value: 'processing' },
-                { label: '识别失败', value: 'failed' },
+                { label: `全部 ${list.length}`, value: '全部' },
+                ...STATUS_ORDER.filter((s) => counts[s]).map((s) => ({ label: `${STATUS_LABEL[s]} ${counts[s]}`, value: s })),
               ]}
             />
           </Col>
@@ -128,136 +408,66 @@ export default function Documents() {
               placeholder="来源"
               value={source}
               onChange={setSource}
-              style={{ width: 200 }}
-              options={sources.map((s) => ({ value: s, label: s }))}
+              style={{ width: 140 }}
+              options={SOURCE_OPTIONS}
             />
           </Col>
           <Col flex="auto" style={{ textAlign: 'right' }}>
-            <Space size={10}>
-              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                共 <Mono>{filtered.length}</Mono> 个文件
-              </Typography.Text>
-              <Button size="small" icon={<ReloadOutlined />} onClick={() => fetchDocuments().then(setList)}>
-                刷新
-              </Button>
-            </Space>
+            <Button size="small" icon={<ReloadOutlined />} onClick={() => setList(scannedDocs)}>
+              重置
+            </Button>
           </Col>
         </Row>
       </Card>
 
+      {/* ---------- 池子列表 ---------- */}
       <Card className="ia-card" size="small" title="扫描件池" styles={{ body: { padding: 12 } }}>
         {filtered.length === 0 ? (
-          <Empty description="暂无扫描件">
+          <Empty description="暂无单据">
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              今晚 23:00 定时任务将自动拉取邮箱新附件并完成识别
+              今晚 23:00 定时任务将自动拉取邮箱新附件
             </Typography.Text>
           </Empty>
         ) : (
-          <Table<ScannedDoc>
-            size="small"
-            rowKey="id"
-            columns={columns}
-            dataSource={filtered}
-            pagination={{ pageSize: 10, size: 'small', showTotal: (t) => `共 ${t} 条` }}
-            scroll={{ x: 1300 }}
-            rowClassName={(row) => (row.ocrStatus === 'failed' ? 'ia-row-diff' : isLowConfidence(row.ocrConfidence) && row.ocrStatus !== 'processing' ? 'ia-row-low-conf' : '')}
-          />
+          <div ref={tableRef}>
+            <Table<ScannedDoc>
+              size="small"
+              rowKey="id"
+              columns={columns}
+              dataSource={filtered}
+              pagination={{ pageSize: 10, size: 'small', showTotal: (t) => `共 ${t} 条` }}
+              scroll={{ x: 1180 }}
+              rowClassName={() => 'ia-row-clickable'}
+            />
+          </div>
         )}
       </Card>
 
-      {/* 预览抽屉 */}
-      <Drawer
-        width={720}
+      {/* ---------- 单据详情（与复核工作台复用同一组件） ---------- */}
+      <Modal
         title={
           <Space size={8}>
-            <span style={{ fontSize: 13 }}>扫描件预览</span>
-            <Mono>{preview?.fileName}</Mono>
+            <FileTextOutlined style={{ color: '#1677ff' }} />
+            <span style={{ fontSize: 13 }}>单据详情</span>
+            <Mono>{detail?.item.invoiceNo}</Mono>
+            <span style={{ fontSize: 11, color: 'rgba(0,0,0,.45)' }}>发票原图 + 抽取字段 + 匹配结果 + trace 链路</span>
           </Space>
         }
-        open={!!preview}
-        onClose={() => setPreview(null)}
-        extra={
+        open={!!detail}
+        onCancel={() => setDetailId(null)}
+        footer={
           <Space>
-            <Button size="small" onClick={() => message.success('已下载原件')}>
-              下载原件
-            </Button>
-            <Button size="small" type="primary" onClick={() => navigate('/review')}>
-              去复核
+            <Button onClick={() => setDetailId(null)}>关闭</Button>
+            <Button type="primary" icon={<ExportOutlined />} onClick={() => navigate('/review')}>
+              去复核工作台处理
             </Button>
           </Space>
         }
+        width={1180}
+        styles={{ body: { padding: 12, height: 660, overflow: 'hidden' } }}
       >
-        {preview && (
-          <Row gutter={[12, 12]}>
-            <Col span={10}>
-              <div
-                style={{
-                  height: 260,
-                  border: '1px dashed #d9d9d9',
-                  borderRadius: 6,
-                  background: '#fafafa',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 6,
-                  color: 'rgba(0,0,0,.45)',
-                }}
-              >
-                <FileTextOutlined style={{ fontSize: 34 }} />
-                <span style={{ fontSize: 12 }}>票据影像渲染区</span>
-                <Mono style={{ fontSize: 11 }}>
-                  {preview.pages} 页 · 200 dpi
-                </Mono>
-              </div>
-              <div style={{ marginTop: 10, fontSize: 12 }}>
-                <div>
-                  <Typography.Text type="secondary">来源：</Typography.Text>
-                  {preview.source}
-                </div>
-                <div>
-                  <Typography.Text type="secondary">上传时间：</Typography.Text>
-                  <Mono>{preview.uploadedAt}</Mono>
-                </div>
-                <div>
-                  <Typography.Text type="secondary">关联单据：</Typography.Text>
-                  <Mono>{preview.linkedDocNo}</Mono>
-                </div>
-              </div>
-            </Col>
-            <Col span={14}>
-              <Space size={8} wrap style={{ marginBottom: 8 }}>
-                <OcrStatusTag status={preview.ocrStatus} />
-                {preview.ocrStatus !== 'processing' && <ConfidenceTag confidence={preview.ocrConfidence} />}
-                <span style={{ fontSize: 12, color: 'rgba(0,0,0,.65)' }}>
-                  金额 <Mono>{preview.amount ? formatMoney(preview.amount) : '—'}</Mono>
-                </span>
-              </Space>
-
-              {preview.ocrStatus === 'failed' && (
-                <Alert
-                  type="error"
-                  showIcon
-                  style={{ marginBottom: 10 }}
-                  message="识别失败"
-                  description="第 2 页倾斜超阈值且存在印章遮挡，建议重新扫描后再次提交。"
-                />
-              )}
-
-              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                OCR 原文
-              </Typography.Text>
-              <div className="mono ia-io-block" style={{ maxHeight: 320, marginTop: 4 }}>
-                {ocrTextSample}
-              </div>
-
-              <Button type="link" style={{ padding: 0, marginTop: 8 }} icon={<ExportOutlined />} onClick={() => navigate('/traces')}>
-                查看该单据的完整处理链路
-              </Button>
-            </Col>
-          </Row>
-        )}
-      </Drawer>
+        {detail && <InvoiceDetailPanel detail={detail} pdfWidth={240} matchWidth={400} />}
+      </Modal>
     </div>
   );
 }

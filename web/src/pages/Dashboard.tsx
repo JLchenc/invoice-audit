@@ -8,7 +8,7 @@ import { SemanticTag } from '@/components/tags';
 import { fetchDashboard } from '@/api';
 import type { DashboardData } from '@/types';
 import { formatAmount, formatMoney, formatPercent } from '@/utils/format';
-import { COLOR, TECH } from '@/theme';
+import { COLOR } from '@/theme';
 
 const C = COLOR;
 
@@ -55,26 +55,32 @@ const buildTrend = (el: HTMLDivElement, data: TrendRow[]) =>
     },
   });
 
-/** 异常类型分布：横向条形图，按归因编码 */
+/** 异常类型分布：横向条形图 —— y 轴保留归因编码，中文名走图例（与处理量趋势同一套图例样式） */
+const ANOMALY_COLORS = ['#1677ff', '#13c2c2', '#722ed1', '#fa8c16', '#eb2f96', '#52c41a', '#f5222d'];
+
 const buildAnomaly = (el: HTMLDivElement, data: DashboardData['anomaly']) =>
   new Bar(el, {
     data,
     xField: 'count',
     yField: 'code',
-    seriesField: 'code',
+    seriesField: 'label',
     autoFit: true,
-    legend: false,
+    legend: {
+      position: 'top',
+      flipPage: false,
+      itemHeight: 14,
+      itemName: { style: { fontSize: 11, fill: C.textSecondary } },
+    },
     barWidthRatio: 0.55,
     barStyle: {
       radius: [0, 2, 2, 0],
-      fill: TECH.gradientAi,
     },
     label: {
       position: 'right',
       style: { fontSize: 11, fill: C.textSecondary, fontFamily: 'Consolas, monospace' },
     },
     tooltip: {
-      fields: ['code', 'label', 'count'],
+      fields: ['label', 'code', 'count'],
       showMarkers: false,
       enterable: false,
     },
@@ -89,7 +95,10 @@ const buildAnomaly = (el: HTMLDivElement, data: DashboardData['anomaly']) =>
       line: null,
       tickLine: null,
     },
-    theme: { styleSheet: { backgroundColor: 'transparent' } },
+    theme: {
+      colors: ANOMALY_COLORS,
+      styleSheet: { backgroundColor: 'transparent' },
+    },
   });
 
 export default function Dashboard() {

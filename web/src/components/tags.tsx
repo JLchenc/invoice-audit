@@ -1,6 +1,7 @@
 import React from 'react';
-import { Tag } from 'antd';
+import { Tag, Tooltip } from 'antd';
 import { TAG_COLOR } from '@/theme';
+import { reasonLabel } from '@/utils/reasonCodes';
 import type { DocStatus, Priority } from '@/types';
 import type { StepStatus } from '@/types';
 
@@ -17,7 +18,7 @@ export function SemanticTag({
   style?: React.CSSProperties;
 }) {
   return (
-    <Tag bordered={false} style={{ ...TAG_COLOR[semantic], borderRadius: 4, marginInlineEnd: 0, ...style }}>
+    <Tag variant="filled" style={{ ...TAG_COLOR[semantic], borderRadius: 4, marginInlineEnd: 0, ...style }}>
       {children}
     </Tag>
   );
@@ -46,9 +47,14 @@ export function DocStatusTag({ status }: { status: DocStatus }) {
   return <SemanticTag semantic={cfg.semantic}>{cfg.text}</SemanticTag>;
 }
 
-/** 归因编码 Tag（QTY_MISMATCH 等） */
+/** 归因 Tag：直接显示中文释义，原始归因编码（枚举）放悬停提示，便于对日志排查 */
 export function AttrTag({ code }: { code: string }) {
-  return <SemanticTag semantic="error">{code}</SemanticTag>;
+  const label = reasonLabel(code);
+  return (
+    <Tooltip title={label && label !== code ? `归因编码：${code}` : undefined}>
+      <SemanticTag semantic="error">{label ?? code}</SemanticTag>
+    </Tooltip>
+  );
 }
 
 /** 置信度 Tag */

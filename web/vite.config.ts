@@ -1,5 +1,5 @@
 import { createReadStream, existsSync, statSync } from 'node:fs';
-import { createServer } from 'node:http';
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import path from 'node:path';
 import { fileURLToPath, URL } from 'node:url';
 import { defineConfig, type Plugin } from 'vite';
@@ -18,7 +18,7 @@ const MIME: Record<string, string> = {
  * 生产环境由后端（FastAPI 静态挂载或对象存储）提供，前端只认 URL。
  */
 function serveDataDir(): Plugin {
-  const attach = (server: { middlewares: { use: (fn: (req: createServer.IncomingMessage, res: createServer.ServerResponse, next: () => void) => void) => void } }) => {
+  const attach = (server: { middlewares: { use: (fn: (req: IncomingMessage, res: ServerResponse, next: () => void) => void) => void } }) => {
     server.middlewares.use((req, res, next) => {
       const raw = req.url ?? '';
       if (!raw.startsWith('/data/')) return next();

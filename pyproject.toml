@@ -1,0 +1,44 @@
+[project]
+name = "invoice-audit"
+version = "0.1.0"
+description = "发票智审 InvoiceAudit · 应付核算数字员工（工号 AP-001）后端"
+requires-python = ">=3.12"
+# 运行依赖：uvicorn[standard] 自带 watchfiles（--reload 热重载靠它）
+# sqlalchemy[asyncio] 才会把 greenlet 一起带进来，否则 async 引擎启动直接 ImportError
+dependencies = [
+    "fastapi[standard]>=0.162",
+    "uvicorn[standard]>=0.30",
+    "sqlalchemy[asyncio]>=2.0",
+    "alembic>=1.20",
+    "asyncpg>=0.32",
+    "redis>=5.0",
+    "arq>=0.28",
+    "openai>=3.0",
+    "pydantic-settings>=2.0",
+    "python-multipart>=0.0.6",
+    "cryptography>=50.0",
+    "pdfplumber>=0.11",
+    "pypdfium2>=5.0",
+    "pgvector>=0.3",
+]
+
+# 开发依赖组：用 `uv sync --group dev` 或 `uv run pytest` 时按需拉取
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "httpx>=0.28",
+    "ruff>=0.6",
+]
+
+# 这是「应用」不是「要发布的包」，关掉构建步骤，uv 只管依赖与环境
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = ["server"]
