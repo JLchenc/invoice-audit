@@ -22,3 +22,9 @@ web/build.log
 # pdf.js 静态资源（cmaps/standard_fonts/image_decoders）
 # 由 web/package.json 的 postinstall 脚本从 node_modules/pdfjs-dist 自动生成
 web/public/pdfjs/
+
+# 本地走查产物：临时探针脚本、截图、vite 冒烟日志
+web/scripts/tmp-*.mjs
+web/shot-*.png
+web/vite-smoke.log
+web/vite-smoke.err

@@ -4,6 +4,7 @@ import Review from '@/pages/Review';
 import Dashboard from '@/pages/Dashboard';
 import Documents from '@/pages/Documents';
 import Rules from '@/pages/Rules';
+import Kb from '@/pages/Kb';
 import Evals from '@/pages/Evals';
 import Providers from '@/pages/Providers';
 import Traces from '@/pages/Traces';
@@ -17,6 +18,7 @@ export default function App() {
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="documents" element={<Documents />} />
         <Route path="rules" element={<Rules />} />
+        <Route path="kb" element={<Kb />} />
         <Route path="evals" element={<Evals />} />
         <Route path="providers" element={<Providers />} />
         <Route path="traces" element={<Traces />} />

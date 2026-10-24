@@ -20,6 +20,7 @@ export const dashboardData: DashboardData = {
     backlogByPriority: { P0: 1, P1: 6, P2: 11 },
     monthCost: 1842.6,
     monthCostBudget: 2200.0,
+    myQueueCount: 8,
   },
   trend,
   anomaly: [

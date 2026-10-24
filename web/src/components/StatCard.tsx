@@ -1,6 +1,5 @@
 import React from 'react';
 import { Card, Space, Typography } from 'antd';
-import { COLOR } from '@/theme';
 
 /**
  * 自绘指标卡（规范 §3.2 / §3.4）：
@@ -27,7 +26,8 @@ export default function StatCard({
         {title}
       </Typography.Text>
       <div style={{ marginTop: 6, display: 'flex', alignItems: 'flex-end', gap: 6 }}>
-        <span className="mono" style={{ fontSize: 24, fontWeight: 600, lineHeight: 1.1, color: COLOR.textPrimary }}>
+        {/* 颜色必须走 CSS 变量：写死 COLOR.textPrimary 在深色模式下会变成黑字黑底 */}
+        <span className="mono" style={{ fontSize: 24, fontWeight: 600, lineHeight: 1.1, color: 'var(--ia-text)' }}>
           {value}
         </span>
         {unit ? (

@@ -1,18 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Button, Card, Empty, Input, Segmented, Select, Space, Steps, Typography, message } from 'antd';
-import {
-  CaretDownOutlined,
-  CaretRightOutlined,
-  CheckCircleFilled,
-  CloseCircleFilled,
-  ExclamationCircleFilled,
-  LoadingOutlined,
-} from '@ant-design/icons';
+import { Alert, Button, Card, Empty, Input, Select, Space, Typography } from 'antd';
+import { message } from '@/utils/toast';
+import { Column } from '@antv/g2plot';
 import Mono from '@/components/Mono';
+import AntVChart from '@/components/AntVChart';
+import TraceStepNode from '@/components/TraceStep';
 import { TraceStatusTag } from '@/components/tags';
+import { useThemeMode } from '@/components/ThemeModeProvider';
 import { fetchTraces } from '@/api';
 import type { TraceRecord, TraceStep } from '@/types';
-import { formatDuration, formatMoney } from '@/utils/format';
+import { formatDuration, formatMoney, formatTokens } from '@/utils/format';
 
 const LEVELS = ['L1', 'L2', 'L3', 'L4', 'L5', 'L6'];
 
@@ -23,22 +20,47 @@ const STATUSES = [
   { label: '进行中', value: 'running' },
 ];
 
-function StepIcon({ status }: { status: TraceStep['status'] }) {
-  const map = {
-    finish: <CheckCircleFilled style={{ color: '#52c41a' }} />,
-    warn: <ExclamationCircleFilled style={{ color: '#faad14' }} />,
-    process: <LoadingOutlined style={{ color: '#1677ff' }} />,
-    error: <CloseCircleFilled style={{ color: '#ff4d4f' }} />,
-  } as const;
-  return map[status];
-}
+/** 成本 → token 的换算（¥4 / 百万 token），mock 未回写 token 时用于展示 */
+const TOKENS_PER_YUAN = 250_000;
 
-/** antd Steps 的 status 不支持 warn，统一映射为 error（状态点图标由自定义 icon 承载） */
-function toStepsStatus(status: TraceStep['status']): 'finish' | 'process' | 'error' | 'wait' {
-  if (status === 'finish') return 'finish';
-  if (status === 'process') return 'process';
-  return 'error';
-}
+const chartColors = (dark: boolean) => ({
+  text: dark ? '#B6BDC9' : '#5A6069',
+  grid: dark ? '#2C333D' : '#EDEFF2',
+});
+
+/** 成本瀑布：把每步 token 成本按步骤堆叠（v2 §6.7） */
+const buildCostWaterfall = (el: HTMLDivElement, data: { step: string; cost: number }[], dark: boolean) => {
+  const c = chartColors(dark);
+  return new Column(el, {
+    data,
+    xField: 'x',
+    yField: 'cost',
+    seriesField: 'step',
+    isStack: true,
+    autoFit: true,
+    columnWidthRatio: 0.34,
+    legend: {
+      position: 'top',
+      flipPage: false,
+      itemName: { style: { fontSize: 11, fill: c.text } },
+    },
+    tooltip: { shared: true, showMarkers: false },
+    xAxis: { label: null, line: null, tickLine: null },
+    yAxis: {
+      label: {
+        formatter: (v: string) => `¥${Number(v).toFixed(3)}`,
+        style: { fontSize: 11, fill: c.text },
+      },
+      grid: { line: { style: { stroke: c.grid, lineDash: [3, 3] } } },
+    },
+    theme: {
+      colors: dark
+        ? ['#7BA1FF', '#56BCD9', '#FFB56B', '#6FCF97', '#8B93A1']
+        : ['#2A5CE0', '#0E7C9B', '#C77700', '#17934F', '#8A9099'],
+      styleSheet: { backgroundColor: 'transparent' },
+    },
+  });
+};
 
 export default function Traces() {
   const [list, setList] = useState<TraceRecord[]>([]);
@@ -47,6 +69,8 @@ export default function Traces() {
   const [level, setLevel] = useState<string | undefined>(undefined);
   const [status, setStatus] = useState<string | undefined>(undefined);
   const [expanded, setExpanded] = useState<string[]>([]);
+  const { mode } = useThemeMode();
+  const dark = mode === 'dark';
 
   useEffect(() => {
     fetchTraces().then((rows) => {
@@ -71,6 +95,21 @@ export default function Traces() {
 
   const current = list.find((t) => t.id === selectedId) ?? filtered[0];
 
+  /** 步骤补全 token（mock 未回写时按成本折算），供成本瀑布与步骤节点展示 */
+  const steps: TraceStep[] = useMemo(
+    () =>
+      (current?.steps ?? []).map((s) => ({
+        ...s,
+        tokens: s.tokens ?? (s.cost > 0 ? Math.round(s.cost * TOKENS_PER_YUAN) : undefined),
+      })),
+    [current],
+  );
+
+  const costData = useMemo(
+    () => steps.filter((s) => s.cost > 0).map((s) => ({ x: '成本归因', step: s.title, cost: s.cost })),
+    [steps],
+  );
+
   return (
     <div className="page-root page-root--fill">
       <div style={{ display: 'flex', gap: 12, flex: '1 1 auto', minHeight: 0 }}>
@@ -78,8 +117,8 @@ export default function Traces() {
         <Card
           className="ia-card"
           size="small"
-          title={<span style={{ fontSize: 13 }}>运行记录</span>}
-          extra={<span style={{ fontSize: 11, color: 'rgba(0,0,0,.45)' }}>{filtered.length} 条</span>}
+          title={<span>运行记录</span>}
+          extra={<span style={{ fontSize: 11, color: 'var(--ia-text-3)' }}>{filtered.length} 条</span>}
           style={{ width: 250, flex: '0 0 250px' }}
           styles={{ body: { padding: 8, display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0, overflow: 'auto' } }}
         >
@@ -130,8 +169,8 @@ export default function Traces() {
                       </Mono>
                       <TraceStatusTag status={t.status} />
                     </div>
-                    <Mono style={{ fontSize: 11, color: 'rgba(0,0,0,.65)' }}>{t.docNo}</Mono>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2, fontSize: 11, color: 'rgba(0,0,0,.45)' }}>
+                    <Mono style={{ fontSize: 11, color: 'var(--ia-text-2)' }}>{t.docNo}</Mono>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2, fontSize: 11, color: 'var(--ia-text-3)' }}>
                       <span>
                         {t.steps.length} 步 · {formatDuration(t.totalMs)}
                       </span>
@@ -151,13 +190,13 @@ export default function Traces() {
           loading={!current}
           title={
             <Space size={8}>
-              <span style={{ fontSize: 13 }}>链路详情</span>
+              <span>链路详情</span>
               <Mono>{current?.shortId}</Mono>
             </Space>
           }
           extra={
             <Space size={10}>
-              <span style={{ fontSize: 12, color: 'rgba(0,0,0,.45)' }}>
+              <span style={{ fontSize: 12, color: 'var(--ia-text-3)' }}>
                 总成本 <Mono strong>{current ? formatMoney(current.totalCost) : '--'}</Mono>
               </span>
               <Button size="small" type="text" onClick={() => message.success('已导出该 trace 的完整日志 JSON')}>
@@ -179,8 +218,8 @@ export default function Traces() {
                   flexWrap: 'wrap',
                   gap: 20,
                   padding: '8px 12px',
-                  background: '#fafafa',
-                  border: '1px solid #f0f0f0',
+                  background: 'var(--ia-header)',
+                  border: '1px solid var(--ia-border)',
                   borderRadius: 6,
                   marginBottom: 14,
                 }}
@@ -193,92 +232,43 @@ export default function Traces() {
                 <Summary label="总成本" value={formatMoney(current.totalCost)} />
               </div>
 
-              <Steps
-                orientation="vertical"
-                size="small"
-                current={current.steps.length}
-                items={current.steps.map((s) => ({
-                  title: (
-                    <Space size={8} wrap>
-                      <span style={{ fontSize: 13 }}>{s.title}</span>
-                      <span style={{ fontSize: 11, color: 'rgba(0,0,0,.45)' }}>{s.level}</span>
-                      <span style={{ fontSize: 11, color: 'rgba(0,0,0,.45)' }}>
-                        <Mono>{formatDuration(s.durationMs)}</Mono>
-                      </span>
-                      <span style={{ fontSize: 11, color: 'rgba(0,0,0,.45)' }}>
-                        成本 <Mono>{s.cost ? formatMoney(s.cost) : '¥0.00'}</Mono>
-                      </span>
-                    </Space>
-                  ),
-                  status: toStepsStatus(s.status),
-                  icon: <StepIcon status={s.status} />,
-                  description: (
-                    <div style={{ marginTop: 2 }}>
-                      <div style={{ fontSize: 12, color: 'rgba(0,0,0,.65)' }}>{s.summary}</div>
+              {/* 垂直 Steps 链路（L0→L6），每步可展开看输入 / 输出摘要 */}
+              <div>
+                {steps.map((s) => (
+                  <TraceStepNode
+                    key={s.key}
+                    step={s}
+                    expanded={expanded.includes(s.key)}
+                    onToggle={() =>
+                      setExpanded((prev) => (prev.includes(s.key) ? prev.filter((k) => k !== s.key) : [...prev, s.key]))
+                    }
+                  />
+                ))}
+              </div>
 
-                      {s.waitMinutes !== undefined && (
-                        <div style={{ fontSize: 12, color: '#d46b08', marginTop: 4 }}>
-                          已等待 <Mono>{s.waitMinutes}</Mono> 分钟 · {s.escalation}
-                        </div>
-                      )}
-
-                      {(s.input || s.output) && (
-                        <Button
-                          type="link"
-                          size="small"
-                          style={{ padding: 0, height: 20, marginTop: 2 }}
-                          onClick={() => setExpanded((prev) => (prev.includes(s.key) ? prev.filter((k) => k !== s.key) : [...prev, s.key]))}
-                          icon={expanded.includes(s.key) ? <CaretDownOutlined /> : <CaretRightOutlined />}
-                        >
-                          {expanded.includes(s.key) ? '收起 input/output' : '展开 input/output'}
-                        </Button>
-                      )}
-
-                      {expanded.includes(s.key) && (
-                        <div style={{ marginTop: 4, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                          {s.input && (
-                            <div>
-                              <Typography.Text type="secondary" style={{ fontSize: 11 }}>
-                                input
-                              </Typography.Text>
-                              <div className="mono ia-io-block ia-io-block-dark">{s.input}</div>
-                            </div>
-                          )}
-                          {s.output && (
-                            <div>
-                              <Typography.Text type="secondary" style={{ fontSize: 11 }}>
-                                output
-                              </Typography.Text>
-                              <div className="mono ia-io-block ia-io-block-dark">{s.output}</div>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  ),
-                }))}
-              />
-
-              {/* 成本归因到步骤 */}
-              <div style={{ marginTop: 16 }}>
-                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                  成本归因（LLM 步骤）
-                </Typography.Text>
-                <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
-                  {current.steps
-                    .filter((s) => s.cost > 0)
-                    .map((s) => (
-                      <div key={s.key} style={{ border: '1px solid #f0f0f0', borderRadius: 4, padding: '4px 8px', background: '#fafafa' }}>
-                        <div style={{ fontSize: 11, color: 'rgba(0,0,0,.45)' }}>{s.title}</div>
-                        <Mono strong style={{ fontSize: 12 }}>
-                          {formatMoney(s.cost)}
-                        </Mono>
-                        <span style={{ fontSize: 11, color: 'rgba(0,0,0,.45)', marginLeft: 6 }}>
-                          {((s.cost / current.totalCost) * 100).toFixed(0)}%
-                        </span>
-                      </div>
-                    ))}
-                </div>
+              {/* 成本瀑布：钱花在哪一步 */}
+              <div style={{ marginTop: 4 }}>
+                <Space size={8} style={{ marginBottom: 2 }}>
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                    成本瀑布（按步骤堆叠）
+                  </Typography.Text>
+                  <span style={{ fontSize: 11, color: 'var(--ia-text-3)' }}>
+                    合计 <Mono>{formatMoney(current.totalCost)}</Mono> ·{' '}
+                    <Mono>
+                      {formatTokens(steps.reduce((acc, s) => acc + (s.tokens ?? 0), 0))}
+                    </Mono>{' '}
+                    tokens
+                  </span>
+                </Space>
+                {costData.length > 0 ? (
+                  <AntVChart
+                    height={180}
+                    version={`${current.id}-${costData.length}-${dark}`}
+                    onReady={(el) => buildCostWaterfall(el, costData, dark)}
+                  />
+                ) : (
+                  <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="本次链路无 LLM 成本" />
+                )}
               </div>
 
               {current.status === 'error' && (

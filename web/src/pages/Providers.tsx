@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Alert, Button, Card, Col, Form, Input, Modal, Row, Select, Space, Table, Tag, Typography, message } from 'antd';
+import { Alert, Button, Card, Col, Form, Input, Modal, Row, Select, Space, Table, Tag, Typography } from 'antd';
+import { message } from '@/utils/toast';
 import type { ColumnsType } from 'antd/es/table';
 import { LockOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import Mono from '@/components/Mono';
@@ -35,7 +36,7 @@ export default function Providers() {
       render: (v: string) => (
         <Space size={6}>
           <Mono>{v}</Mono>
-          <Tag variant="filled" style={{ background: '#fafafa', color: 'rgba(0,0,0,.45)', borderRadius: 4, marginInlineEnd: 0 }}>
+          <Tag variant="filled" style={{ background: 'var(--ia-header)', color: 'var(--ia-text-3)', borderRadius: 4, marginInlineEnd: 0 }}>
             <LockOutlined style={{ marginRight: 4 }} />
             已加密
           </Tag>

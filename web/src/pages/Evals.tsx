@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Alert, Button, Card, Col, Modal, Progress, Row, Space, Table, Tag, Typography, message } from 'antd';
+import { Alert, Button, Card, Col, Modal, Progress, Row, Space, Table, Typography } from 'antd';
+import { message } from '@/utils/toast';
 import type { ColumnsType } from 'antd/es/table';
 import { Radar } from '@antv/g2plot';
 import { PlayCircleOutlined, RobotOutlined, RocketOutlined } from '@ant-design/icons';
@@ -7,14 +8,13 @@ import AntVChart from '@/components/AntVChart';
 import Mono from '@/components/Mono';
 import StatCard from '@/components/StatCard';
 import { GateTag, SemanticTag } from '@/components/tags';
+import { useThemeMode } from '@/components/ThemeModeProvider';
 import { fetchEval, rerunEval } from '@/api';
 import type { EvalData, VersionCompareRow } from '@/types';
 import { deltaColor, formatDelta } from '@/utils/format';
 import { COLOR, TECH } from '@/theme';
 
 const C = COLOR;
-
-const TAG_WARN = { background: '#fff7e6', borderColor: '#ffd591', color: '#d46b08', borderRadius: 4, marginInlineEnd: 0 };
 
 /** 模型能力画像：各维度归一化到 0-100，当前版本 vs 上一版本 */
 const CAPABILITY = [
@@ -25,7 +25,7 @@ const CAPABILITY = [
   { dimension: '成本效率', current: 25.9, previous: 28.5 },
 ];
 
-const buildRadar = (el: HTMLDivElement) =>
+const buildRadar = (el: HTMLDivElement, dark: boolean) =>
   new Radar(el, {
     data: radarData,
     xField: 'dimension',
@@ -34,25 +34,25 @@ const buildRadar = (el: HTMLDivElement) =>
     autoFit: true,
     legend: {
       position: 'bottom',
-      itemName: { style: { fontSize: 11, fill: C.textSecondary } },
+      itemName: { style: { fontSize: 11, fill: dark ? '#B6BDC9' : C.textSecondary } },
     },
     area: { style: { fillOpacity: 0.22 } },
     point: { size: 2.5 },
     xAxis: {
       line: null,
       tickLine: null,
-      label: { style: { fontSize: 11, fill: C.textSecondary } },
-      grid: { line: { style: { lineDash: [3, 3] } } },
+      label: { style: { fontSize: 11, fill: dark ? '#B6BDC9' : C.textSecondary } },
+      grid: { line: { style: { lineDash: [3, 3], stroke: dark ? '#2C333D' : '#EDEFF2' } } },
     },
     yAxis: {
       min: 0,
       max: 100,
       label: false,
-      grid: { line: { style: { lineDash: [3, 3] } } },
+      grid: { line: { style: { lineDash: [3, 3], stroke: dark ? '#2C333D' : '#EDEFF2' } } },
     },
     tooltip: { showMarkers: false, enterable: false },
     theme: {
-      colors: [TECH.aiAccent, '#d9d9d9'],
+      colors: [TECH.aiAccent, dark ? '#5A6069' : '#d9d9d9'],
       styleSheet: { backgroundColor: 'transparent' },
     },
   });
@@ -66,6 +66,8 @@ const radarData = CAPABILITY.flatMap((d) => [
 export default function Evals() {
   const [data, setData] = useState<EvalData | null>(null);
   const [forceOpen, setForceOpen] = useState(false);
+  const { mode } = useThemeMode();
+  const dark = mode === 'dark';
 
   useEffect(() => {
     let alive = true;
@@ -166,7 +168,7 @@ export default function Evals() {
               extra={
                 <>
                   {m.target !== undefined && (
-                    <span style={{ color: 'rgba(0,0,0,.45)' }}>
+                    <span style={{ color: 'var(--ia-text-3)' }}>
                       目标 {m.target}
                       {m.unit === '%' ? '%' : m.unit === 'ms' ? 's' : '元'}
                     </span>
@@ -175,7 +177,7 @@ export default function Evals() {
                 </>
               }
             >
-              {m.hint && <div style={{ fontSize: 11, color: 'rgba(0,0,0,.45)' }}>{m.hint}</div>}
+              {m.hint && <div style={{ fontSize: 11, color: 'var(--ia-text-3)' }}>{m.hint}</div>}
             </StatCard>
           </Col>
         ))}
@@ -191,20 +193,20 @@ export default function Evals() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
                     <span style={{ fontSize: 12 }}>{f.field}</span>
                     <Space size={6}>
-                      {f.accuracy < f.target && <Tag style={TAG_WARN}>未达标</Tag>}
-                      <Mono strong style={{ color: f.accuracy < f.target ? '#d46b08' : undefined }}>
+                      {f.accuracy < f.target && <SemanticTag semantic="warning">未达标</SemanticTag>}
+                      <Mono strong style={{ color: f.accuracy < f.target ? 'var(--ia-warn-fg)' : undefined }}>
                         {f.accuracy.toFixed(1)}%
                       </Mono>
-                      <span style={{ fontSize: 11, color: 'rgba(0,0,0,.45)' }}>/ {f.target}%</span>
+                      <span style={{ fontSize: 11, color: 'var(--ia-text-3)' }}>/ {f.target}%</span>
                     </Space>
                   </div>
                   <Progress
                     percent={f.accuracy}
                     showInfo={false}
                     size="small"
-                    strokeColor={f.accuracy < f.target ? '#faad14' : '#52c41a'}
+                    strokeColor={f.accuracy < f.target ? '#faad14' : 'var(--ia-pass-fg)'}
                   />
-                  <div style={{ fontSize: 11, color: 'rgba(0,0,0,.45)', marginTop: 2 }}>
+                  <div style={{ fontSize: 11, color: 'var(--ia-text-3)', marginTop: 2 }}>
                     样本 <Mono>{f.samples.toLocaleString('zh-CN')}</Mono> 条
                   </div>
                 </div>
@@ -223,8 +225,8 @@ export default function Evals() {
             style={{ flex: 1 }}
             styles={{ body: { padding: 12 } }}
           >
-            <AntVChart height={258} onReady={buildRadar} />
-            <div style={{ fontSize: 11, color: 'rgba(0,0,0,.45)', textAlign: 'center' }}>
+            <AntVChart height={258} version={dark ? 'dark' : 'light'} onReady={(el) => buildRadar(el, dark)} />
+            <div style={{ fontSize: 11, color: 'var(--ia-text-3)', textAlign: 'center' }}>
               各维度归一化至 0–100，「成本效率」为预算余量反向计分
             </div>
           </Card>
@@ -251,7 +253,7 @@ export default function Evals() {
         size="small"
         title="发布门禁"
         style={{ flex: '0 0 auto' }}
-        extra={<span style={{ fontSize: 11, color: 'rgba(0,0,0,.45)' }}>阻塞项未达标禁止一键发布</span>}
+        extra={<span style={{ fontSize: 11, color: 'var(--ia-text-3)' }}>阻塞项未达标禁止一键发布</span>}
         styles={{ body: { padding: 14 } }}
       >
         <Row gutter={[12, 12]}>
@@ -262,18 +264,18 @@ export default function Evals() {
                   height: '100%',
                   padding: '8px 10px',
                   borderRadius: 6,
-                  background: g.passed ? '#f6ffed' : '#fff7e6',
-                  border: `1px solid ${g.passed ? '#b7eb8f' : '#ffd591'}`,
+                  background: g.passed ? 'var(--ia-pass-bg)' : 'var(--ia-warn-bg)',
+                  border: `1px solid ${g.passed ? 'var(--ia-pass-fg)' : 'var(--ia-warn-fg)'}`,
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                  <div style={{ fontSize: 12, minWidth: 0 }}>{g.label}</div>
+                  <div style={{ fontSize: 12, minWidth: 0, color: 'var(--ia-text)' }}>{g.label}</div>
                   <GateTag passed={g.passed} />
                 </div>
-                {g.hint && <div style={{ fontSize: 11, color: 'rgba(0,0,0,.45)', marginTop: 2 }}>{g.hint}</div>}
+                {g.hint && <div style={{ fontSize: 11, color: 'var(--ia-text-2)', marginTop: 2 }}>{g.hint}</div>}
                 <div style={{ marginTop: 4 }}>
-                  <Mono style={{ color: g.passed ? '#389e0d' : '#d46b08', fontSize: 13 }}>{g.actual}</Mono>
-                  <span style={{ fontSize: 11, color: 'rgba(0,0,0,.45)', marginLeft: 6 }}>/ 阈值 {g.threshold}</span>
+                  <Mono style={{ color: g.passed ? 'var(--ia-pass-fg)' : 'var(--ia-warn-fg)', fontSize: 13 }}>{g.actual}</Mono>
+                  <span style={{ fontSize: 11, color: 'var(--ia-text-2)', marginLeft: 6 }}>/ 阈值 {g.threshold}</span>
                 </div>
               </div>
             </Col>
@@ -352,7 +354,7 @@ export default function Evals() {
           ))}
           style={{ marginBottom: 10 }}
         />
-        <div style={{ fontSize: 12, color: 'rgba(0,0,0,.65)' }}>
+        <div style={{ fontSize: 12, color: 'var(--ia-text-2)' }}>
           发布后未达标字段将维持「强制人工复核」，直至下一轮评测达标。该操作需填写理由并同步至财务共享中心负责人。
         </div>
       </Modal>

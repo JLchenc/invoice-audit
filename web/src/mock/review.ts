@@ -4,7 +4,7 @@ import type { ExtractedField, AiSuggestion, MatchRow, QueueItem, ReviewDetail } 
  * 复核工作台 mock —— 与 data/manifest.json 的 50 张样例票据对齐。
  * pdfFile 指向 data/invoices/ 下真实 PDF，由 PdfPreview 渲染。
  */
-export const reviewQueue: QueueItem[] = [
+const rawQueue: QueueItem[] = [
   {
     id: 'q1',
     invoiceNo: '15118876',
@@ -111,6 +111,23 @@ export const reviewQueue: QueueItem[] = [
   },
 ];
 
+/** 队列项的归因编码（与 reviewDetails 的归因结论保持一致） */
+const QUEUE_REASON: Record<string, string> = {
+  q1: 'AMT_OVER_TOLERANCE',
+  q2: 'SUPPLIER_MISMATCH',
+  q3: 'ARITH_FAIL',
+  q4: 'ARITH_FAIL',
+  q5: 'NO_PO',
+  q6: 'FIELD_LOW_CONFIDENCE',
+  q7: 'FIELD_LOW_CONFIDENCE',
+  q8: 'QTY_MISMATCH',
+};
+
+/** 队列：组内按时间升序（v2 §5.2），并挂上归因编码 */
+export const reviewQueue: QueueItem[] = rawQueue
+  .map((q) => ({ ...q, reasonCode: QUEUE_REASON[q.id] }))
+  .sort((a, b) => a.receivedAt.localeCompare(b.receivedAt));
+
 const money = (v: number) => v.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 /** 低置信字段（manifest simulated_field_confidence < 0.9 的项） */
@@ -132,7 +149,7 @@ function cleanMatch(amountExTax: number, tax: number, total: number, taxNo: stri
 export const reviewDetails: Record<string, ReviewDetail> = {
   /* ---------- q1 金额超容差（INV-2026-0001） ---------- */
   q1: {
-    item: reviewQueue[0],
+    item: rawQueue[0],
     docPages: 1,
     fields: [
       { key: 'invoice_code', label: '发票代码', value: '0110109921', confidence: 0.99, mono: true },
@@ -170,7 +187,7 @@ export const reviewDetails: Record<string, ReviewDetail> = {
 
   /* ---------- q2 供应商税号不一致（INV-2026-0015，P0） ---------- */
   q2: {
-    item: reviewQueue[1],
+    item: rawQueue[1],
     docPages: 1,
     fields: [
       { key: 'invoice_code', label: '发票代码', value: '0110183815', confidence: 0.98, mono: true },
@@ -217,7 +234,7 @@ export const reviewDetails: Record<string, ReviewDetail> = {
 
   /* ---------- q6 低置信强制人工（INV-2026-0002） ---------- */
   q6: {
-    item: reviewQueue[5],
+    item: rawQueue[5],
     docPages: 1,
     fields: [
       { key: 'invoice_code', label: '发票代码', value: '0110815817', confidence: 0.97, mono: true },
@@ -247,7 +264,7 @@ export const reviewDetails: Record<string, ReviewDetail> = {
 
   /* ---------- q3 勾稽失败：价税合计多 120 元（INV-2026-0010） ---------- */
   q3: {
-    item: reviewQueue[2],
+    item: rawQueue[2],
     docPages: 1,
     fields: [
       { key: 'invoice_code', label: '发票代码', value: '0110257087', confidence: 0.99, mono: true },
@@ -286,7 +303,7 @@ export const reviewDetails: Record<string, ReviewDetail> = {
 
   /* ---------- q4 税额比「金额×税率」多 25.60（INV-2026-0013） ---------- */
   q4: {
-    item: reviewQueue[3],
+    item: rawQueue[3],
     docPages: 1,
     fields: [
       { key: 'invoice_code', label: '发票代码', value: '0110493152', confidence: 0.97, mono: true },
@@ -324,7 +341,7 @@ export const reviewDetails: Record<string, ReviewDetail> = {
 
   /* ---------- q5 无单可匹（INV-2026-0016） ---------- */
   q5: {
-    item: reviewQueue[4],
+    item: rawQueue[4],
     docPages: 1,
     fields: [
       { key: 'invoice_code', label: '发票代码', value: '0110763849', confidence: 0.99, mono: true },
@@ -359,7 +376,7 @@ export const reviewDetails: Record<string, ReviewDetail> = {
 
   /* ---------- q7 低置信强制人工（INV-2026-0014） ---------- */
   q7: {
-    item: reviewQueue[6],
+    item: rawQueue[6],
     docPages: 1,
     fields: [
       { key: 'invoice_code', label: '发票代码', value: '0110690568', confidence: 0.96, mono: true },
@@ -389,7 +406,7 @@ export const reviewDetails: Record<string, ReviewDetail> = {
 
   /* ---------- q8 部分入库（INV-2026-0012） ---------- */
   q8: {
-    item: reviewQueue[7],
+    item: rawQueue[7],
     docPages: 1,
     fields: [
       { key: 'invoice_code', label: '发票代码', value: '0110203052', confidence: 0.99, mono: true },
@@ -426,9 +443,71 @@ export const reviewDetails: Record<string, ReviewDetail> = {
   },
 };
 
+/**
+ * 字段来源（v2 §5.4 可审计在字段级的落地）。
+ * mock：真实环境由 L2 抽取阶段回写 `llm:{provider}:{model}` 或 `parser`。
+ */
+const FIELD_SOURCE: Record<string, string> = {
+  invoice_code: 'parser',
+  invoice_no: 'parser',
+  invoice_date: 'llm:deepseek:deepseek-v3',
+  vendor_name: 'llm:deepseek:deepseek-v3',
+  vendor_tax_no: 'parser',
+  amount_excl_tax: 'llm:deepseek:deepseek-v3',
+  tax_rate: 'parser',
+  tax_amount: 'llm:deepseek:deepseek-v3',
+  total_amount: 'llm:deepseek:deepseek-v3',
+  buyer_tax_no: 'parser',
+};
+
+/**
+ * 影像坐标（归一化 0–1 的 [x, y, w, h]）。
+ * mock：真实环境由 L1 版面解析产出（PRD §6.2），驱动字段 ↔ 影像联动高亮。
+ */
+const FIELD_BBOX: Record<string, [number, number, number, number]> = {
+  invoice_code: [0.08, 0.1, 0.24, 0.035],
+  invoice_no: [0.62, 0.1, 0.24, 0.035],
+  invoice_date: [0.6, 0.2, 0.26, 0.03],
+  buyer_tax_no: [0.08, 0.34, 0.36, 0.03],
+  vendor_name: [0.08, 0.42, 0.36, 0.035],
+  vendor_tax_no: [0.08, 0.47, 0.36, 0.03],
+  amount_excl_tax: [0.6, 0.62, 0.24, 0.03],
+  tax_rate: [0.48, 0.66, 0.1, 0.03],
+  tax_amount: [0.6, 0.66, 0.24, 0.03],
+  total_amount: [0.6, 0.74, 0.26, 0.04],
+};
+
+/** 归因 → 命中的知识库文档引用（空数组 = 无引用，AI 建议降级灰显） */
+const KB_REFERENCES: Record<string, string[]> = {
+  AMT_OVER_TOLERANCE: ['《费用报销管理制度》v3.2 §4.1', '《采购结算 SOP》v1.8 §2.3'],
+  SUPPLIER_MISMATCH: ['《供应商主数据管理规范》v2.1 §5'],
+  ARITH_FAIL: ['《增值税发票审核要点》v4.0 §2'],
+  QTY_MISMATCH: ['《部分入库处理指引》v1.3 §3'],
+  NO_PO: ['《无单采购管理办法》v2.0 §6'],
+  FIELD_LOW_CONFIDENCE: [],
+};
+
+/** 无文本层扫描件（走多模态解析，需要在影像区提示） */
+const SCANNED_NO_TEXT_LAYER: Record<string, boolean> = { q6: true, q7: true };
+
 /** 未列出的单据回退到首单详情（接口就绪后由后端返回） */
 export function getReviewDetail(id: string): ReviewDetail {
-  return reviewDetails[id] ?? reviewDetails.q1;
+  const base = reviewDetails[id] ?? reviewDetails.q1;
+  return {
+    ...base,
+    dpi: 300,
+    scannedNoTextLayer: SCANNED_NO_TEXT_LAYER[id] ?? false,
+    fields: base.fields.map((f) => ({
+      ...f,
+      source: f.source ?? FIELD_SOURCE[f.key] ?? 'parser',
+      bbox: f.bbox ?? FIELD_BBOX[f.key],
+      page: f.page ?? 1,
+    })),
+    suggestion: {
+      ...base.suggestion,
+      references: base.suggestion.references ?? KB_REFERENCES[base.suggestion.code] ?? [],
+    },
+  };
 }
 
 export const reviewQueueStats = {

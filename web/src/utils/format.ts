@@ -27,8 +27,10 @@ export function formatDuration(ms: number): string {
   return `${ms} ms`;
 }
 
-/** 置信度 < 0.75 视为低置信，整行 amber 高亮并强制进人工队列 */
-export const LOW_CONFIDENCE = 0.75;
+/**
+ * 置信度 < 0.9 视为低置信：整行浅琥珀底 + 琥珀置信度条，强制进人工队列（v2 §5.4 / §8）
+ */
+export const LOW_CONFIDENCE = 0.9;
 
 export function isLowConfidence(c: number): boolean {
   return c < LOW_CONFIDENCE;

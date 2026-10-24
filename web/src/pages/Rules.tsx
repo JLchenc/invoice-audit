@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
-import { Alert, Button, Card, Col, Divider, Form, InputNumber, Modal, Row, Space, Switch, Table, Typography, message } from 'antd';
+import { useEffect, useMemo, useState } from 'react';
+import { Alert, Button, Card, Col, Divider, Form, InputNumber, Modal, Row, Space, Switch, Table, Typography } from 'antd';
+import { message } from '@/utils/toast';
 import type { ColumnsType } from 'antd/es/table';
-import { EyeOutlined, SaveOutlined } from '@ant-design/icons';
+import { DiffOutlined, EyeOutlined, SaveOutlined } from '@ant-design/icons';
 import Mono from '@/components/Mono';
-import { ProviderStatusTag } from '@/components/tags';
+import { ProviderStatusTag, SemanticTag } from '@/components/tags';
 import {
   fetchProviders,
   fetchRuleConfig,
@@ -24,6 +25,7 @@ export default function Rules() {
   const [impact, setImpact] = useState<RuleImpact | null>(null);
   const [impactOpen, setImpactOpen] = useState(false);
   const [publishOpen, setPublishOpen] = useState(false);
+  const [diffOpen, setDiffOpen] = useState(false);
 
   useEffect(() => {
     fetchRuleConfig().then((c) => {
@@ -36,6 +38,26 @@ export default function Rules() {
   }, []);
 
   const dirty = !!config && !!draft && JSON.stringify(config) !== JSON.stringify(draft);
+
+  /** 版本左右 diff：当前生效版 vs 待发布版（v2 §6.2） */
+  const diffRows = useMemo(() => {
+    if (!config || !draft) return [];
+    const defs: { key: keyof RuleConfig; label: string; fmt: (v: RuleConfig[keyof RuleConfig]) => string }[] = [
+      { key: 'amountTolerance', label: '金额容差', fmt: (v) => `¥${Number(v).toFixed(2)}` },
+      { key: 'qtyTolerance', label: '数量容差', fmt: (v) => `${v} 件` },
+      { key: 'dateWindowDays', label: '日期窗口', fmt: (v) => `±${v} 天` },
+      { key: 'lowConfidenceThreshold', label: '低置信阈值', fmt: (v) => `${v}%` },
+      { key: 'lowConfidenceManual', label: '低置信强制人工', fmt: (v) => (v ? '开启' : '关闭') },
+      { key: 'withinTolerancePass', label: '容差内放行', fmt: (v) => (v ? '开启' : '关闭') },
+      { key: 'taxNoMismatchReject', label: '税号不一致驳回', fmt: (v) => (v ? '开启' : '关闭') },
+    ];
+    return defs.map((d) => ({
+      ...d,
+      current: d.fmt(config[d.key]),
+      next: d.fmt(draft[d.key]),
+      changed: config[d.key] !== draft[d.key],
+    }));
+  }, [config, draft]);
 
   const patch = <K extends keyof RuleConfig>(key: K, value: RuleConfig[K]) =>
     setDraft((d) => (d ? { ...d, [key]: value } : d));
@@ -90,7 +112,7 @@ export default function Rules() {
       key: 'version',
       width: 56,
       render: (v: string, row) => (
-        <Mono strong style={row.status === 'current' ? { color: '#0958d9' } : undefined}>
+        <Mono strong style={row.status === 'current' ? { color: 'var(--ia-primary)' } : undefined}>
           {v}
         </Mono>
       ),
@@ -143,6 +165,9 @@ export default function Rules() {
             }
           />
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
+            <Button size="small" icon={<DiffOutlined />} onClick={() => setDiffOpen(true)}>
+              版本对比
+            </Button>
             <Button size="small" icon={<EyeOutlined />} onClick={runPreview}>
               预览影响
             </Button>
@@ -194,6 +219,9 @@ export default function Rules() {
                 <Button type="primary" icon={<SaveOutlined />} disabled={!dirty} onClick={() => setPublishOpen(true)}>
                   保存并发布
                 </Button>
+                <Button icon={<DiffOutlined />} disabled={!dirty} onClick={() => setDiffOpen(true)}>
+                  版本对比
+                </Button>
                 <Button icon={<EyeOutlined />} disabled={!dirty} onClick={runPreview}>
                   预览影响
                 </Button>
@@ -234,17 +262,17 @@ export default function Rules() {
               className="ia-card"
               size="small"
               title="步骤路由策略"
-              extra={<span style={{ fontSize: 11, color: 'rgba(0,0,0,.45)' }}>L1–L6</span>}
+              extra={<span style={{ fontSize: 11, color: 'var(--ia-text-3)' }}>L1–L6</span>}
               styles={{ body: { padding: 12, overflow: 'auto' } }}
             >
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {policies.map((p) => (
-                  <div key={p.step} style={{ borderLeft: '2px solid #e6f4ff', paddingLeft: 10 }}>
+                  <div key={p.step} style={{ borderLeft: '2px solid var(--ia-primary-soft)', paddingLeft: 10 }}>
                     <div style={{ fontSize: 12 }}>
                       <strong>{p.step}</strong>
-                      <span style={{ color: 'rgba(0,0,0,.45)', marginLeft: 6 }}>{p.task}</span>
+                      <span style={{ color: 'var(--ia-text-3)', marginLeft: 6 }}>{p.task}</span>
                     </div>
-                    <div style={{ fontSize: 12, color: 'rgba(0,0,0,.65)' }}>
+                    <div style={{ fontSize: 12, color: 'var(--ia-text-2)' }}>
                       目标：<Mono>{p.target}</Mono>
                       {p.fallback !== '—' && (
                         <>
@@ -262,6 +290,64 @@ export default function Rules() {
           </div>
         </Col>
       </Row>
+
+      {/* 版本左右 diff（发布前对比当前生效版 vs 待发布版） */}
+      <Modal
+        title={
+          <Space size={8}>
+            <DiffOutlined />
+            <span style={{ fontSize: 14 }}>版本对比</span>
+            <span style={{ fontSize: 11, color: 'var(--ia-text-3)' }}>
+              当前生效版 vs 待发布版 · {diffRows.filter((r) => r.changed).length} 项变化
+            </span>
+          </Space>
+        }
+        open={diffOpen}
+        onCancel={() => setDiffOpen(false)}
+        onOk={() => {
+          setDiffOpen(false);
+          setPublishOpen(true);
+        }}
+        okText="去发布"
+        cancelText="关闭"
+        width={560}
+      >
+        <Table
+          size="small"
+          pagination={false}
+          rowKey="key"
+          dataSource={diffRows}
+          rowClassName={(row) => (row.changed ? 'ia-row-diff' : '')}
+          columns={[
+            { title: '参数', dataIndex: 'label', key: 'label', width: 130 },
+            {
+              title: '当前生效版',
+              dataIndex: 'current',
+              key: 'current',
+              align: 'right',
+              render: (v: string) => <Mono>{v}</Mono>,
+            },
+            {
+              title: '待发布版',
+              dataIndex: 'next',
+              key: 'next',
+              align: 'right',
+              render: (v: string, row) => <Mono strong={row.changed}>{v}</Mono>,
+            },
+            {
+              title: '变化',
+              key: 'changed',
+              width: 62,
+              render: (_, row) =>
+                row.changed ? (
+                  <SemanticTag semantic="error">变更</SemanticTag>
+                ) : (
+                  <span style={{ fontSize: 11, color: 'var(--ia-text-3)' }}>不变</span>
+                ),
+            },
+          ]}
+        />
+      </Modal>
 
       {/* 影响预览 */}
       <Modal
@@ -282,7 +368,7 @@ export default function Rules() {
           description="翻转单将重新进入复核队列，原人工结论保留可追溯。"
           style={{ marginBottom: 12 }}
         />
-        <div style={{ fontSize: 12, color: 'rgba(0,0,0,.65)' }}>涉及规则：</div>
+        <div style={{ fontSize: 12, color: 'var(--ia-text-2)' }}>涉及规则：</div>
         <ul style={{ fontSize: 12, marginTop: 4 }}>
           {(impact?.affectedRules ?? ['R-AMT-01 金额容差', 'R-DATE-01 开票日期窗口', 'R-CONF-01 低置信强制人工']).map((r) => (
             <li key={r}>
@@ -309,7 +395,7 @@ export default function Rules() {
             影响范围：<strong>{impact?.inFlightCount ?? 18}</strong> 张在途单，
             <strong>{impact?.flipCount ?? 4}</strong> 张结果翻转
           </div>
-          <div style={{ color: 'rgba(0,0,0,.45)' }}>发布操作将记录操作人工号、IP 与时间戳，不可撤销。</div>
+          <div style={{ color: 'var(--ia-text-3)' }}>发布操作将记录操作人工号、IP 与时间戳，不可撤销。</div>
         </div>
       </Modal>
     </div>

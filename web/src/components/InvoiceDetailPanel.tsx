@@ -1,14 +1,14 @@
 import { Card, Empty, Space, Table, Typography } from 'antd';
-import { ThoughtChain } from '@ant-design/x';
-import { RobotOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import Mono from '@/components/Mono';
 import PdfPreview from '@/components/PdfPreview';
-import { AttrTag, ConfidenceTag } from '@/components/tags';
+import AiSuggestion from '@/components/AiSuggestion';
+import ConfidenceBar from '@/components/ConfidenceBar';
+import DiffCell from '@/components/DiffCell';
+import { AttrTag } from '@/components/tags';
 import { invoiceUrl } from '@/utils/invoice';
 import type { ExtractedField, MatchRow, ReviewDetail } from '@/types';
-import { formatAmount, isLowConfidence } from '@/utils/format';
-import { TECH } from '@/theme';
+import { isLowConfidence } from '@/utils/format';
 
 /**
  * 单据详情面板 —— 复核工作台与扫描件池共用同一组件。
@@ -36,35 +36,56 @@ export default function InvoiceDetailPanel({
   const diffCount = detail.match.filter((m) => m.diff).length;
   const lowConfCount = detail.fields.filter((f) => isLowConfidence(f.confidence)).length;
 
+  /** 首个失败维度即停（PRD §6.3）：之后的维度置灰 */
+  const firstFail = detail.match.findIndex((m) => m.diff);
+
   const fieldColumns: ColumnsType<ExtractedField> = [
-    { title: '字段', dataIndex: 'label', key: 'label', width: 104, ellipsis: true },
+    { title: '字段', dataIndex: 'label', key: 'label', width: 96, ellipsis: true },
     {
-      title: '抽取值',
+      title: '抽取値',
       dataIndex: 'value',
       key: 'value',
       render: (v: string) => <Mono strong>{v}</Mono>,
     },
     {
+      title: '来源',
+      dataIndex: 'source',
+      key: 'source',
+      width: 112,
+      render: (v?: string) => <Mono style={{ fontSize: 11, color: 'var(--ia-ai-deep)' }}>{v ?? 'parser'}</Mono>,
+    },
+    {
       title: '置信度',
       dataIndex: 'confidence',
       key: 'confidence',
-      width: 82,
+      width: 84,
       align: 'right',
-      render: (v: number) => <ConfidenceTag confidence={v} />,
+      render: (v: number) => <ConfidenceBar value={v} />,
     },
   ];
 
   const matchColumns: ColumnsType<MatchRow> = [
-    { title: '对照项', dataIndex: 'field', key: 'field', width: 104, ellipsis: true },
-    { title: '发票', dataIndex: 'invoice', key: 'invoice', render: (v: string) => <Mono>{v}</Mono> },
-    { title: '采购订单', dataIndex: 'po', key: 'po', render: (v: string) => <Mono>{v}</Mono> },
-    { title: '入库单', dataIndex: 'grn', key: 'grn', render: (v: string) => <Mono>{v}</Mono> },
+    { title: '维度', dataIndex: 'field', key: 'field', width: 96, ellipsis: true },
     {
-      title: '结论',
+      title: '发票',
+      dataIndex: 'invoice',
+      key: 'invoice',
+      render: (v: string, row) => (row.diff ? <DiffCell value={v} /> : <Mono nowrap>{v}</Mono>),
+    },
+    { title: 'PO', dataIndex: 'po', key: 'po', render: (v: string) => <Mono nowrap>{v}</Mono> },
+    { title: 'GRN', dataIndex: 'grn', key: 'grn', render: (v: string) => <Mono nowrap>{v}</Mono> },
+    {
+      title: '判定',
       key: 'result',
-      width: 128,
-      render: (_, row) =>
-        row.diff ? <AttrTag code={row.code ?? 'DIFF'} /> : <span style={{ color: 'rgba(0,0,0,.45)', fontSize: 12 }}>一致</span>,
+      width: 116,
+      render: (_, row, i) =>
+        row.diff ? (
+          <AttrTag code={row.code ?? 'DIFF'} />
+        ) : firstFail >= 0 && i > firstFail ? (
+          <span style={{ color: 'var(--ia-text-3)', fontSize: 12 }}>—</span>
+        ) : (
+          <span style={{ color: 'var(--ia-text-3)', fontSize: 12 }}>一致</span>
+        ),
     },
   ];
 
@@ -77,14 +98,14 @@ export default function InvoiceDetailPanel({
         loading={loading}
         title={
           <Space size={8}>
-            <span style={{ fontSize: 13 }}>发票原图</span>
+            <span>发票原图</span>
           </Space>
         }
         style={{ width: pdfWidth, flex: `0 0 ${pdfWidth}px`, minWidth: 0 }}
         styles={{ body: { padding: 12, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' } }}
       >
         <PdfPreview file={invoiceUrl(detail.item.pdfFile)} fileName={detail.item.pdfFile} showHint={false} style={{ flex: '1 1 auto', minHeight: 0 }} />
-        <div style={{ marginTop: 6, fontSize: 11, color: 'rgba(0,0,0,.45)' }}>
+        <div style={{ marginTop: 6, fontSize: 11, color: 'var(--ia-text-3)' }}>
           <Mono>{detail.item.pdfFile}</Mono> · {detail.item.invoiceType}
         </div>
       </Card>
@@ -96,8 +117,8 @@ export default function InvoiceDetailPanel({
         loading={loading}
         title="抽取字段"
         extra={
-          <span style={{ fontSize: 12, color: 'rgba(0,0,0,.45)' }}>
-            低置信 <Mono style={{ color: '#d46b08' }}>{lowConfCount}</Mono> 项
+          <span style={{ fontSize: 12, color: 'var(--ia-text-3)' }}>
+            低置信 <Mono style={{ color: 'var(--ia-warn-fg)' }}>{lowConfCount}</Mono> 项
           </span>
         }
         style={{ flex: '1 1 300px', minWidth: 300 }}
@@ -111,7 +132,7 @@ export default function InvoiceDetailPanel({
           pagination={false}
           rowClassName={(row) => (isLowConfidence(row.confidence) ? 'ia-row-low-conf' : '')}
         />
-        <div style={{ marginTop: 6, fontSize: 11, color: 'rgba(0,0,0,.45)' }}>
+        <div style={{ marginTop: 6, fontSize: 11, color: 'var(--ia-text-3)' }}>
           低置信行整行高亮（置信度 &lt; 75% 强制进人工队列）
         </div>
       </Card>
@@ -123,13 +144,13 @@ export default function InvoiceDetailPanel({
         loading={loading}
         title={
           <Space size={8}>
-            <span style={{ fontSize: 13 }}>三单对照</span>
-            <span style={{ fontSize: 11, color: 'rgba(0,0,0,.45)' }}>发票 / 采购订单 / 入库单</span>
+            <span>三单对照</span>
+            <span style={{ fontSize: 11, color: 'var(--ia-text-3)' }}>发票 / 采购订单 / 入库单</span>
           </Space>
         }
         extra={
           <span style={{ fontSize: 12 }}>
-            差异 <Mono style={{ color: '#cf1322' }}>{diffCount}</Mono> 项
+            差异 <Mono style={{ color: 'var(--ia-diff-fg)' }}>{diffCount}</Mono> 项
           </span>
         }
         style={{ width: matchWidth, flex: `0 1 ${matchWidth}px`, minWidth: 360 }}
@@ -145,47 +166,16 @@ export default function InvoiceDetailPanel({
           style={{ flex: '0 0 auto' }}
         />
 
-        {/* AI 归因建议：思维链只读呈现，绝不提供「一键执行」 */}
-        <div className="ia-card ia-card-ai" style={{ borderRadius: 8, padding: '8px 10px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-            <Space size={6}>
-              <RobotOutlined style={{ color: TECH.aiAccent }} />
-              <span style={{ fontSize: 12, fontWeight: 600, color: TECH.aiAccentDeep }}>AI 归因推理链</span>
-              <AttrTag code={detail.suggestion.code} />
-            </Space>
-            <span style={{ fontSize: 11, color: 'rgba(0,0,0,.45)' }}>
-              置信度 <Mono>{(detail.suggestion.confidence * 100).toFixed(0)}%</Mono>
-            </span>
-          </div>
+        {/* AI 归因建议：只读青色虚线块，绝不提供「一键执行」（v2 §8） */}
+        <AiSuggestion
+          suggestion={{ ...detail.suggestion, references: detail.suggestion.references ?? [] }}
+          references={detail.suggestion.references ?? []}
+        />
 
-          <ThoughtChain
-            line="dashed"
-            defaultExpandedKeys={['tc-l4']}
-            items={[
-              { key: 'tc-l1', title: '版面解析', description: `${detail.docPages} 页 · 本地 OCR 置信度 0.96`, status: 'success', collapsible: false },
-              { key: 'tc-l2', title: '字段抽取', description: `${detail.fields.length} 个核心字段 · 低置信 ${lowConfCount} 项`, status: lowConfCount > 0 ? 'error' : 'success', collapsible: false },
-              { key: 'tc-l3', title: '三单比对', description: `命中 ${diffCount} 项差异`, status: diffCount > 0 ? 'error' : 'success', collapsible: false },
-              {
-                key: 'tc-l4',
-                title: '归因结论',
-                description: detail.suggestion.action,
-                status: 'success',
-                collapsible: true,
-                content: (
-                  <div style={{ fontSize: 12, lineHeight: 1.7 }}>
-                    <div style={{ color: 'rgba(0,0,0,.65)' }}>{detail.suggestion.reason}</div>
-                    <ul style={{ margin: '4px 0 0', paddingLeft: 16, color: 'rgba(0,0,0,.65)' }}>
-                      {detail.suggestion.evidence.map((e) => (
-                        <li key={e}>{e}</li>
-                      ))}
-                    </ul>
-                  </div>
-                ),
-                footer: <span style={{ fontSize: 11, color: 'rgba(0,0,0,.45)' }}>建议仅作参考 · 最终决策由复核人做出（系统不提供一键执行）</span>,
-              },
-            ]}
-          />
-        </div>
+        <Typography.Text type="secondary" style={{ fontSize: 11 }}>
+          版面解析 {detail.docPages} 页 · 抽取 {detail.fields.length} 字段（低置信 {lowConfCount}）· 命中差异{' '}
+          {diffCount} 项
+        </Typography.Text>
       </Card>
     </div>
   );

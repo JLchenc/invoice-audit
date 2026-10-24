@@ -17,8 +17,8 @@ import {
   Tooltip,
   Typography,
   Upload,
-  message,
 } from 'antd';
+import { message } from '@/utils/toast';
 import type { ColumnsType } from 'antd/es/table';
 import type { UploadFile, UploadProps } from 'antd';
 import {
@@ -50,16 +50,46 @@ const SOURCE_OPTIONS: { value: DocSource; label: string }[] = [
 ];
 
 /** 处理链路（与设计稿一致） */
-const PIPELINE: { label: string; detail: string }[] = [
-  { label: 'POST /api/documents', detail: 'multipart 上传' },
-  { label: 'app.invoice_documents', detail: '文档落库' },
-  { label: 'Redis 队列', detail: "status=pending, source='upload'" },
-  { label: 'Worker L1 版面解析', detail: '本地 OCR' },
-  { label: 'L2 字段抽取', detail: 'LLM' },
-  { label: 'L3 勾稽', detail: '价税合计校验' },
-  { label: 'L4 三单匹配', detail: '发票 / PO / GRN' },
-  { label: 'L5 分流', detail: 'matched / review / exception' },
-  { label: '状态回写 + trace', detail: 'ctrl.trace_records' },
+/**
+ * 处理链路按阶段收拢：Redis 入队是「同步请求」与「Worker 异步」的分界线，
+ * 9 个步骤平铺既读不出阶段、也放不下不折行 —— 段内改走竖向 stepper，段间一条带标注的连接线。
+ */
+const PIPELINE_STAGES: {
+  name: string;
+  note: string;
+  /** 进入本阶段的连接线标注 */
+  from?: string;
+  steps: { label: string; detail: string }[];
+}[] = [
+  {
+    name: '同步入口',
+    note: '请求内完成',
+    steps: [
+      { label: 'POST /api/documents', detail: 'multipart 上传' },
+      { label: 'app.invoice_documents', detail: '文档落库' },
+      { label: 'Redis 队列', detail: "status=pending, source='upload'" },
+    ],
+  },
+  {
+    name: 'Worker 异步',
+    note: '失败退避 · 可重入队',
+    from: '出队消费',
+    steps: [
+      { label: 'L1 版面解析', detail: '本地 OCR' },
+      { label: 'L2 字段抽取', detail: 'LLM' },
+      { label: 'L3 勾稽', detail: '价税合计校验' },
+      { label: 'L4 三单匹配', detail: '发票 / PO / GRN' },
+    ],
+  },
+  {
+    name: '结果收口',
+    note: '供前端消费',
+    from: '结论落库',
+    steps: [
+      { label: 'L5 分流', detail: 'matched / review / exception' },
+      { label: '状态回写 + trace', detail: 'ctrl.trace_records' },
+    ],
+  },
 ];
 
 const STATUS_TAG: Record<DocProcessStatus, 'disabled' | 'info' | 'success' | 'warning' | 'error'> = {
@@ -210,9 +240,9 @@ export default function Documents() {
       ellipsis: true,
       render: (v: string, row: ScannedDoc) => (
         <Space size={6}>
-          <FileTextOutlined style={{ color: '#1677ff' }} />
+          <FileTextOutlined style={{ color: 'var(--ia-primary)' }} />
           <Mono title={v}>{v}</Mono>
-          <span style={{ fontSize: 11, color: 'rgba(0,0,0,.45)' }}>{row.pages} 页</span>
+          <span style={{ fontSize: 11, color: 'var(--ia-text-3)' }}>{row.pages} 页</span>
         </Space>
       ),
     },
@@ -233,7 +263,7 @@ export default function Documents() {
           <SemanticTag semantic={STATUS_TAG[v]}>{STATUS_LABEL[v]}</SemanticTag>
           {v === 'failed' && row.retryCount > 0 && (
             <Tooltip title={`已重试 ${row.retryCount} 次`}>
-              <Mono style={{ fontSize: 11, color: 'rgba(0,0,0,.45)' }}>×{row.retryCount}</Mono>
+              <Mono style={{ fontSize: 11, color: 'var(--ia-text-3)' }}>×{row.retryCount}</Mono>
             </Tooltip>
           )}
         </Space>
@@ -247,7 +277,7 @@ export default function Documents() {
       key: 'amount',
       width: 112,
       align: 'right',
-      render: (v: number) => (v ? <Mono>{formatMoney(v)}</Mono> : <span style={{ color: 'rgba(0,0,0,.45)' }}>—</span>),
+      render: (v: number) => (v ? <Mono>{formatMoney(v)}</Mono> : <span style={{ color: 'var(--ia-text-3)' }}>—</span>),
     },
     { title: '上传时间', dataIndex: 'uploadedAt', key: 'uploadedAt', width: 140, render: (v: string) => <Mono>{v}</Mono> },
     {
@@ -284,8 +314,8 @@ export default function Documents() {
         size="small"
         title={
           <Space size={8}>
-            <CloudUploadOutlined style={{ color: '#1677ff' }} />
-            <span style={{ fontSize: 13 }}>上传票据</span>
+            <CloudUploadOutlined style={{ color: 'var(--ia-primary)' }} />
+            <span>上传票据</span>
             <span className="ia-badge-ai">前端传入入口</span>
           </Space>
         }
@@ -297,10 +327,10 @@ export default function Documents() {
           showUploadList={false}
           customRequest={customRequest}
           onChange={handleUploadChange}
-          style={{ background: 'linear-gradient(180deg,#f7fbff,#eef4fb)', borderColor: 'rgba(22,119,255,.4)' }}
+          style={{ background: 'var(--ia-ai-bg)', borderColor: 'var(--ia-ai)' }}
         >
           <p className="ant-upload-drag-icon">
-            <InboxOutlined style={{ color: '#1677ff' }} />
+            <InboxOutlined style={{ color: 'var(--ia-primary)' }} />
           </p>
           <p className="ant-upload-text" style={{ fontSize: 13 }}>
             点击或拖拽 PDF 到此处上传
@@ -321,9 +351,9 @@ export default function Documents() {
                   percent={Math.round(f.percent ?? 0)}
                   size="small"
                   style={{ flex: 1, marginBottom: 0 }}
-                  strokeColor={f.status === 'error' ? '#ff4d4f' : '#1677ff'}
+                  strokeColor={f.status === 'error' ? '#ff4d4f' : 'var(--ia-primary)'}
                 />
-                <span style={{ fontSize: 11, color: 'rgba(0,0,0,.45)', width: 56 }}>
+                <span style={{ fontSize: 11, color: 'var(--ia-text-3)', width: 56 }}>
                   {f.status === 'error' ? '失败' : f.status === 'done' ? '已入队' : '上传中'}
                 </span>
               </div>
@@ -338,30 +368,111 @@ export default function Documents() {
         size="small"
         title={
           <Space size={8}>
-            <span style={{ fontSize: 13 }}>处理链路</span>
-            <span style={{ fontSize: 11, color: 'rgba(0,0,0,.45)' }}>上传后单据在系统里的完整流向</span>
+            <span>处理链路</span>
+            <span style={{ fontSize: 11, color: 'var(--ia-text-3)' }}>上传后单据在系统里的完整流向</span>
           </Space>
         }
         styles={{ body: { padding: 12 } }}
       >
-        <div className="ia-scroll" style={{ display: 'flex', alignItems: 'center', gap: 6, overflowX: 'auto', paddingBottom: 4 }}>
-          {PIPELINE.map((p, i) => (
-            <div key={p.label} style={{ display: 'flex', alignItems: 'center', gap: 6, flex: '0 0 auto' }}>
-              <div
-                style={{
-                  padding: '4px 10px',
-                  borderRadius: 6,
-                  background: '#ffffff',
-                  border: '1px solid #d6caff',
-                  boxShadow: '0 1px 4px rgba(124,92,255,.10)',
-                }}
-              >
-                <Mono style={{ fontSize: 12, color: '#5b3fd6' }}>{p.label}</Mono>
-                <div style={{ fontSize: 10, color: 'rgba(0,0,0,.45)' }}>{p.detail}</div>
+        {/* 三段等宽并列，段内竖向 stepper。连接线属于「它指向的那一段」（跟着段一起折行），
+            若做成平铺的兄弟节点，折行后箭头会孤零零停在行尾指向空白。
+            网格用 auto-fit：窄屏时列宽逐行一致、末行留空，不会像 flex 那样把孤儿行拉满。 */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(248px, 1fr))',
+            gap: 8,
+          }}
+        >
+          {PIPELINE_STAGES.map((s, i) => {
+            const start = PIPELINE_STAGES.slice(0, i).reduce((n, x) => n + x.steps.length, 0);
+            return (
+              <div key={s.name} style={{ display: 'flex', alignItems: 'stretch', gap: 6, minWidth: 0 }}>
+                <div
+                  style={{
+                    flex: '0 0 44px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 3,
+                  }}
+                >
+                  {i > 0 && (
+                    <>
+                      <span style={{ color: 'var(--ia-ai)', fontSize: 13, lineHeight: 1 }}>→</span>
+                      <span style={{ fontSize: 9, lineHeight: 1.25, textAlign: 'center', color: 'var(--ia-text-3)' }}>
+                        {s.from}
+                      </span>
+                    </>
+                  )}
+                </div>
+                <section
+                  style={{
+                    flex: '1 1 auto',
+                    minWidth: 0,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    border: '1px solid var(--ia-border)',
+                    borderRadius: 8,
+                    background: 'var(--ia-container)',
+                    overflow: 'hidden',
+                  }}
+                >
+                  <header
+                    style={{
+                      display: 'flex',
+                      alignItems: 'baseline',
+                      justifyContent: 'space-between',
+                      gap: 8,
+                      padding: '5px 10px',
+                      background: 'var(--ia-ai-bg)',
+                      borderBottom: '1px solid var(--ia-border)',
+                    }}
+                  >
+                    <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: 0.3, color: 'var(--ia-ai-deep)' }}>
+                      {s.name}
+                    </span>
+                    <span style={{ fontSize: 10, color: 'var(--ia-text-3)' }}>{s.note}</span>
+                  </header>
+
+                  <div style={{ flex: '1 1 auto', padding: '8px 10px' }}>
+                    {s.steps.map((st, j) => {
+                      const last = j === s.steps.length - 1;
+                      return (
+                        <div key={st.label} style={{ display: 'flex', gap: 8 }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: '0 0 17px', paddingTop: 1 }}>
+                            <Mono
+                              style={{
+                                display: 'grid',
+                                placeItems: 'center',
+                                width: 17,
+                                height: 17,
+                                flex: '0 0 auto',
+                                borderRadius: '50%',
+                                border: '1px solid var(--ia-ai)',
+                                color: 'var(--ia-ai-deep)',
+                                fontSize: 10,
+                              }}
+                            >
+                              {start + j + 1}
+                            </Mono>
+                            {!last && (
+                              <span style={{ flex: '1 1 auto', width: 1, margin: '2px 0', background: 'var(--ia-border)' }} />
+                            )}
+                          </div>
+                          <div style={{ minWidth: 0, paddingBottom: last ? 0 : 9 }}>
+                            <Mono style={{ display: 'block', fontSize: 12, color: 'var(--ia-text)' }}>{st.label}</Mono>
+                            <div style={{ fontSize: 10, color: 'var(--ia-text-3)' }}>{st.detail}</div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
               </div>
-              {i < PIPELINE.length - 1 && <span style={{ color: '#7c5cff', fontSize: 12 }}>→</span>}
-            </div>
-          ))}
+            );
+          })}
         </div>
       </Card>
 
@@ -386,7 +497,7 @@ export default function Documents() {
           <Col flex="260px">
             <Input
               allowClear
-              prefix={<SearchOutlined style={{ color: 'rgba(0,0,0,.45)' }} />}
+              prefix={<SearchOutlined style={{ color: 'var(--ia-text-3)' }} />}
               placeholder="文件名 / 关联单据 / 销方"
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
@@ -447,10 +558,10 @@ export default function Documents() {
       <Modal
         title={
           <Space size={8}>
-            <FileTextOutlined style={{ color: '#1677ff' }} />
-            <span style={{ fontSize: 13 }}>单据详情</span>
+            <FileTextOutlined style={{ color: 'var(--ia-primary)' }} />
+            <span>单据详情</span>
             <Mono>{detail?.item.invoiceNo}</Mono>
-            <span style={{ fontSize: 11, color: 'rgba(0,0,0,.45)' }}>发票原图 + 抽取字段 + 匹配结果 + trace 链路</span>
+            <span style={{ fontSize: 11, color: 'var(--ia-text-3)' }}>发票原图 + 抽取字段 + 匹配结果 + trace 链路</span>
           </Space>
         }
         open={!!detail}

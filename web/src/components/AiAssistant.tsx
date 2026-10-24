@@ -32,7 +32,7 @@ const CANNED: { match: RegExp; reply: React.ReactNode }[] = [
     match: /差异|归因|数量|QTY|不一致/,
     reply: (
       <div style={{ fontSize: 12, lineHeight: 1.8 }}>
-        <p style={{ margin: 0 }}>该单 5 项差异中 <Mono>QTY_MISMATCH</Mono> 是根因：</p>
+        <p style={{ margin: 0 }}>该单 5 项差异中 数量不一致（<Mono>QTY_MISMATCH</Mono>）是根因：</p>
         <ul style={{ margin: '4px 0', paddingLeft: 16 }}>
           <li>入库单 118 件 vs 发票 120 件，缺口 2 件</li>
           <li>金额差异 ¥2,418.20 完全由数量差派生，量价无单项异常</li>
@@ -50,7 +50,7 @@ const CANNED: { match: RegExp; reply: React.ReactNode }[] = [
         <p style={{ margin: '4px 0 0' }}>
           建议：金额容差可按「单张发票金额的 0.1% 且不超过 ¥50」动态取值，避免大额单被小额容差覆盖。
         </p>
-        <p style={{ margin: '4px 0 0', color: 'rgba(0,0,0,.45)' }}>
+        <p style={{ margin: '4px 0 0', color: 'var(--ia-text-3)' }}>
           注意：修改容差会触发影响预览，预计影响 18 张在途单、4 张结果翻转。
         </p>
       </div>
@@ -123,7 +123,11 @@ export default function AiAssistant({
   }, [open, activeKey]);
 
   useEffect(() => {
-    listRef.current?.scrollTo({ top: 'bottom' });
+    // Bubble.List 的滚动容器是 setState 挂载的，首次挂载的同一次 commit 里还是 undefined，
+    // 此时直接 scrollTo 会在组件库里抛 TypeError 并整树卸载，必须推到下一帧
+    if (list.length === 0) return;
+    const id = window.requestAnimationFrame(() => listRef.current?.scrollTo({ top: 'bottom' }));
+    return () => window.cancelAnimationFrame(id);
   }, [list.length, loading]);
 
   const send = (text: string) => {
@@ -152,7 +156,7 @@ export default function AiAssistant({
       ai: {
         placement: 'start' as const,
         avatar: (
-          <Avatar size={28} style={{ background: 'linear-gradient(135deg,#1677ff,#7c5cff)' }} icon={<RobotOutlined />} />
+          <Avatar size={28} style={{ background: 'linear-gradient(135deg,var(--ia-primary),var(--ia-ai))' }} icon={<RobotOutlined />} />
         ),
         styles: { content: { fontSize: 12 } },
       },
@@ -183,29 +187,29 @@ export default function AiAssistant({
       <div
         style={{
           padding: '10px 14px',
-          borderBottom: '1px solid #f0f0f0',
-          background: 'linear-gradient(135deg,#f3efff,#e6f4ff)',
+          borderBottom: '1px solid var(--ia-split)',
+          background: 'linear-gradient(135deg,var(--ia-ai-bg),var(--ia-primary-soft))',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
         }}
       >
         <Space size={8}>
-          <Badge dot color="#7c5cff" offset={[-2, 6]}>
-            <Avatar size={26} style={{ background: 'linear-gradient(135deg,#1677ff,#7c5cff)' }} icon={<RobotOutlined />} />
+          <Badge dot color="var(--ia-ai)" offset={[-2, 6]}>
+            <Avatar size={26} style={{ background: 'linear-gradient(135deg,var(--ia-primary),var(--ia-ai))' }} icon={<RobotOutlined />} />
           </Badge>
           <div>
             <div style={{ fontSize: 13, fontWeight: 600 }} className="ia-gradient-text">
               AI 复核助手
             </div>
-            <div style={{ fontSize: 11, color: 'rgba(0,0,0,.45)' }}>只读解释 · 不代做决策</div>
+            <div style={{ fontSize: 11, color: 'var(--ia-text-3)' }}>只读解释 · 不代做决策</div>
           </div>
         </Space>
         <Button type="text" size="small" icon={<CloseOutlined />} onClick={onClose} />
       </div>
 
       {/* 会话列表 */}
-      <div style={{ padding: '8px 10px', borderBottom: '1px solid #f0f0f0', maxHeight: 168, overflow: 'auto' }}>
+      <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--ia-split)', maxHeight: 168, overflow: 'auto' }}>
         <Conversations
           items={SESSIONS.map((s) => ({ key: s.key, label: s.label, icon: s.icon }))}
           activeKey={activeKey}
@@ -235,7 +239,7 @@ export default function AiAssistant({
       </div>
 
       {/* 输入区 */}
-      <div style={{ padding: 10, borderTop: '1px solid #f0f0f0' }}>
+      <div style={{ padding: 10, borderTop: '1px solid var(--ia-split)' }}>
         <Space size={6} style={{ marginBottom: 6 }}>
           <SemanticTag semantic="ai">上下文已注入</SemanticTag>
           <Typography.Text type="secondary" style={{ fontSize: 11 }}>
@@ -248,7 +252,7 @@ export default function AiAssistant({
           onSubmit={(v) => send(v)}
           onChange={() => undefined}
         />
-        <div style={{ marginTop: 6, fontSize: 11, color: 'rgba(0,0,0,.45)' }}>
+        <div style={{ marginTop: 6, fontSize: 11, color: 'var(--ia-text-3)' }}>
           助手仅提供解释与依据，采纳 / 驳回决策始终由复核人做出。
           <Button
             type="link"

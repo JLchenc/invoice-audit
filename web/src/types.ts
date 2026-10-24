@@ -17,6 +17,8 @@ export interface QueueItem {
   pdfFile: string;
   poNumber: string | null;
   grnNumber: string | null;
+  /** 队列项上的归因编码（用于队列列表直接显示归因 Tag） */
+  reasonCode?: string;
 }
 
 /** 抽取字段 */
@@ -26,6 +28,18 @@ export interface ExtractedField {
   value: string;
   confidence: number;
   mono?: boolean;
+  /**
+   * 来源（可审计在字段级的落地，v2 §5.4）：
+   * `llm:{provider}:{model}` 或 `parser`
+   */
+  source?: string;
+  /**
+   * 影像坐标 [x, y, w, h]，归一化到 0–1（L1 版面解析产出，PRD §6.2）
+   * 用于字段 ↔ 影像联动高亮
+   */
+  bbox?: [number, number, number, number];
+  /** 所在页码，从 1 开始 */
+  page?: number;
 }
 
 /** 三单对照行 */
@@ -35,8 +49,17 @@ export interface MatchRow {
   invoice: string;
   po: string;
   grn: string;
+  /** 合同（三单对照第四列，可能缺失） */
+  contract?: string;
   diff: boolean;
   code?: string;
+  /** 差异在容差内（提示级，不阻断） */
+  withinTolerance?: boolean;
+  /**
+   * 首个失败维度即停（PRD §6.3）：
+   * 之后的维度置灰显示「—」，避免误导
+   */
+  stopped?: boolean;
 }
 
 /** AI 归因建议（只读，人做最终决策） */
@@ -46,6 +69,8 @@ export interface AiSuggestion {
   confidence: number;
   reason: string;
   evidence: string[];
+  /** 命中的知识库文档引用；为空则无引用拒答、建议降级灰显 */
+  references?: string[];
 }
 
 export interface ReviewDetail {
@@ -54,6 +79,10 @@ export interface ReviewDetail {
   match: MatchRow[];
   suggestion: AiSuggestion;
   docPages: number;
+  /** 无文本层的扫描件：走多模态解析（不是 bug，需要提示） */
+  scannedNoTextLayer?: boolean;
+  /** 分辨率（dpi），影像右上角常驻信息 */
+  dpi?: number;
 }
 
 /** 仪表盘 */
@@ -66,6 +95,8 @@ export interface DashboardSummary {
   backlogByPriority: Record<Priority, number>;
   monthCost: number;
   monthCostBudget: number;
+  /** 今日待办：我的队列剩余张数（v2 §6.6） */
+  myQueueCount: number;
 }
 
 export interface TrendPoint {
@@ -236,6 +267,8 @@ export interface TraceStep {
   status: StepStatus;
   durationMs: number;
   cost: number;
+  /** token 消耗（成本瀑布按步骤归因，v2 §6.7） */
+  tokens?: number;
   summary: string;
   input?: string;
   output?: string;
@@ -254,4 +287,44 @@ export interface TraceRecord {
   totalCost: number;
   status: 'success' | 'warn' | 'error' | 'running';
   createdAt: string;
+}
+
+/* ==================== 知识库 /kb（PRD F15，v2 §6.3 新增） ==================== */
+
+/** 文档类型：制度 · SOP · 税规 · 案例 · 版式 */
+export type KbDocType = 'policy' | 'sop' | 'tax' | 'case' | 'layout';
+
+export interface KbDocument {
+  id: string;
+  title: string;
+  type: KbDocType;
+  version: string;
+  /** 有效期（effective_from ~ effective_to），过期不参与检索 */
+  effectiveFrom: string;
+  effectiveTo: string;
+  status: 'active' | 'expired' | 'indexing';
+  chunks: number;
+  updatedAt: string;
+  updatedBy: string;
+}
+
+/** 检索命中的文档块 */
+export interface KbChunk {
+  id: string;
+  docId: string;
+  docTitle: string;
+  docVersion: string;
+  /** 块序号 */
+  index: number;
+  score: number;
+  text: string;
+}
+
+export interface KbSearchResult {
+  question: string;
+  /** 无引用则拒答（PRD F15） */
+  answer: string;
+  refused: boolean;
+  chunks: KbChunk[];
+  latencyMs: number;
 }

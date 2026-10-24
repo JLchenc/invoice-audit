@@ -1,38 +1,57 @@
 import React from 'react';
-import { Tag, Tooltip } from 'antd';
-import { TAG_COLOR } from '@/theme';
+import { Tooltip } from 'antd';
 import { reasonLabel } from '@/utils/reasonCodes';
 import type { DocStatus, Priority } from '@/types';
 import type { StepStatus } from '@/types';
 
-type Semantic = keyof typeof TAG_COLOR;
+type Semantic = 'info' | 'success' | 'warning' | 'error' | 'disabled' | 'ai';
 
-/** 语义 Tag：浅底 + 同色系深字 + 细边，圆角 4px */
+/** 语义 → CSS 类：颜色走 CSS 变量，深浅色自动适配（不再写死浅色品牌值） */
+const TAG_CLASS: Record<Semantic, string> = {
+  info: 'ia-tag-info',
+  success: 'ia-tag-pass',
+  warning: 'ia-tag-warn',
+  error: 'ia-tag-diff',
+  disabled: 'ia-tag-muted',
+  ai: 'ia-tag-ai',
+};
+
+/** 语义 Tag：浅底 + 同色系深字 + 细边，圆角 4px；solid 用于需要压住密集列表的强调位 */
 export function SemanticTag({
   semantic,
   children,
   style,
+  title,
+  className,
+  solid,
 }: {
   semantic: Semantic;
   children: React.ReactNode;
   style?: React.CSSProperties;
+  title?: string;
+  className?: string;
+  solid?: boolean;
 }) {
   return (
-    <Tag variant="filled" style={{ ...TAG_COLOR[semantic], borderRadius: 4, marginInlineEnd: 0, ...style }}>
+    <span
+      className={`ia-tag ${TAG_CLASS[semantic]}${solid ? ' ia-tag-solid' : ''}${className ? ` ${className}` : ''}`}
+      style={style}
+      title={title}
+    >
       {children}
-    </Tag>
+    </span>
   );
 }
 
-/** 优先级 Tag */
+/** 优先级 Tag（v2：P0 红、P1 琥珀、P2 灰 —— 彩色只留给真异常） */
 export function PriorityTag({ priority }: { priority: Priority }) {
   const map: Record<Priority, { semantic: Semantic; text: string }> = {
-    P0: { semantic: 'error', text: 'P0 紧急' },
+    P0: { semantic: 'error', text: 'P0' },
     P1: { semantic: 'warning', text: 'P1' },
-    P2: { semantic: 'info', text: 'P2' },
+    P2: { semantic: 'disabled', text: 'P2' },
   };
   const cfg = map[priority];
-  return <SemanticTag semantic={cfg.semantic}>{cfg.text}</SemanticTag>;
+  return <SemanticTag semantic={cfg.semantic} solid className="ia-tag-prio">{cfg.text}</SemanticTag>;
 }
 
 /** 单据状态 Tag */
@@ -103,8 +122,8 @@ export function OcrStatusTag({ status }: { status: 'done' | 'processing' | 'fail
 }
 
 export const stepIconColor: Record<StepStatus, string> = {
-  finish: '#52c41a',
-  warn: '#faad14',
-  process: '#1677ff',
-  error: '#ff4d4f',
+  finish: 'var(--ia-pass-fg)',
+  warn: 'var(--ia-warn-fg)',
+  process: 'var(--ia-primary)',
+  error: 'var(--ia-diff-fg)',
 };

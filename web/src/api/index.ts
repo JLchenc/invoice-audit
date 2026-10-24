@@ -7,7 +7,7 @@
  *   - 响应拦截：HTTP 状态归一化为 ApiError，非 2xx 自动弹错误提示（可 silent 关闭）
  *   - 流式：stream() 基于 fetch ReadableStream，适配后端 SSE / StreamingResponse
  */
-import { message } from 'antd';
+import { message } from '@/utils/toast';
 import type {
   DashboardData,
   EvalData,
@@ -20,6 +20,8 @@ import type {
   ScannedDoc,
   TraceRecord,
   QueueItem,
+  KbDocument,
+  KbSearchResult,
 } from '@/types';
 import { reviewQueue, getReviewDetail } from '@/mock/review';
 import { dashboardData } from '@/mock/dashboard';
@@ -27,6 +29,7 @@ import { scannedDocs } from '@/mock/documents';
 import { ruleConfig, ruleVersionHistory, ruleImpact, providerRecords, routingPolicies } from '@/mock/rules';
 import { evalData } from '@/mock/evals';
 import { traceRecords } from '@/mock/traces';
+import { kbDocuments, searchKbMock } from '@/mock/kb';
 
 /** 后端就绪后置为 false */
 export const USE_MOCK = true;
@@ -254,6 +257,39 @@ export async function fetchEval(): Promise<EvalData> {
 export async function rerunEval(): Promise<EvalData> {
   if (USE_MOCK) return delay(evalData);
   return post<EvalData>('/evals/rerun');
+}
+
+/* ---------------- 知识库 /kb（PRD F15） ---------------- */
+
+export async function fetchKbDocuments(): Promise<KbDocument[]> {
+  if (USE_MOCK) return delay(kbDocuments);
+  return get<KbDocument[]>('/kb/documents');
+}
+
+/** 检索测试：强制返回引用，无引用则拒答 */
+export async function searchKb(question: string): Promise<KbSearchResult> {
+  if (USE_MOCK) return delay(searchKbMock(question), 420);
+  return post<KbSearchResult>('/kb/search', { question });
+}
+
+/** 上传制度文档：解析 → 分块 → 向量化 */
+export async function uploadKbDoc(fileName: string): Promise<KbDocument> {
+  if (USE_MOCK)
+    return delay<KbDocument>({
+      id: `kb-${Date.now()}`,
+      title: fileName.replace(/\.[^.]+$/, ''),
+      type: 'policy',
+      version: 'v1.0',
+      effectiveFrom: '2026-10-24',
+      effectiveTo: '2027-10-23',
+      status: 'indexing',
+      chunks: 0,
+      updatedAt: '2026-10-24 10:00',
+      updatedBy: '当前用户',
+    });
+  const form = new FormData();
+  form.append('file', fileName);
+  return postForm<KbDocument>('/kb/documents', form);
 }
 
 /* ---------------- 运行台账 /traces ---------------- */

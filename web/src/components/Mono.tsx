@@ -8,11 +8,17 @@ export default function Mono(props: {
   children: React.ReactNode;
   title?: string;
   strong?: boolean;
+  /** 金额 / 号码折行会读错，窄栏表格里必须整行不换 */
+  nowrap?: boolean;
   style?: React.CSSProperties;
   className?: string;
 }) {
   return (
-    <span className={`mono${props.className ? ` ${props.className}` : ''}`} title={props.title} style={props.style}>
+    <span
+      className={`mono${props.className ? ` ${props.className}` : ''}`}
+      title={props.title}
+      style={props.nowrap ? { whiteSpace: 'nowrap', ...props.style } : props.style}
+    >
       {props.strong ? <strong>{props.children}</strong> : props.children}
     </span>
   );

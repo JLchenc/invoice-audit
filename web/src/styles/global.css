@@ -1,3 +1,78 @@
+/* ============================================================
+ * 发票智审 v2 全局样式 —— 对应 UI-DESIGN-v2.md §2 / §9
+ * 所有自定义样式走 CSS 变量，深浅色由 <html data-theme> 切换。
+ * ========================================================== */
+
+:root[data-theme='light'] {
+  --ia-bg: #f5f6f8;
+  --ia-container: #ffffff;
+  --ia-header: #fafbfc;
+  --ia-sider: #ffffff;
+  --ia-border: #e3e6eb;
+  --ia-split: #edeff2;
+  --ia-text: #1f2329;
+  --ia-text-2: #5a6069;
+  --ia-text-3: #8a9099;
+  --ia-primary: #2a5ce0;
+  --ia-primary-hover: #4c7df0;
+  --ia-primary-active: #1e45b8;
+  --ia-primary-soft: #eef3fe;
+  --ia-ai: #0e7c9b;
+  --ia-ai-bg: #e4f2f6;
+  --ia-ai-deep: #0a5c74;
+  --ia-pass-bg: #e8f6ee;
+  --ia-pass-fg: #0f6b3b;
+  --ia-diff-bg: #fcebeb;
+  --ia-diff-fg: #a32020;
+  /* 实心徽标 / 优先级 chip：底色要够饱和，文字色必须跟着换，否则白字压浅红看不清 */
+  --ia-diff-solid: #d93a3a;
+  --ia-diff-solid-fg: #ffffff;
+  --ia-warn-solid: #c77700;
+  --ia-warn-solid-fg: #ffffff;
+  --ia-muted-solid: #e6e4dd;
+  --ia-muted-solid-fg: #4a4945;
+  --ia-warn-bg: #faeeda;
+  --ia-warn-fg: #854f0b;
+  --ia-muted-bg: #f1efe8;
+  --ia-muted-fg: #5f5e5a;
+  --ia-code-bg: #fafbfc;
+}
+
+:root[data-theme='dark'] {
+  /* 深色不是简单反色：卡片要比页面亮一档，边框要够亮才分得清层次 */
+  --ia-bg: #14171c;
+  --ia-container: #1e232b;
+  --ia-header: #262c35;
+  --ia-sider: #1a1e25;
+  --ia-border: #39414d;
+  --ia-split: #2c333d;
+  --ia-text: #eef1f6;
+  --ia-text-2: #b6bdc9;
+  --ia-text-3: #8b93a1;
+  --ia-primary: #7ba1ff;
+  --ia-primary-hover: #96b4ff;
+  --ia-primary-active: #a9c2ff;
+  --ia-primary-soft: rgba(123, 161, 255, 0.22);
+  --ia-ai: #56bcd9;
+  --ia-ai-bg: rgba(86, 188, 217, 0.16);
+  --ia-ai-deep: #a8dceb;
+  --ia-pass-bg: rgba(35, 170, 96, 0.22);
+  --ia-pass-fg: #7cdea6;
+  --ia-diff-bg: rgba(230, 76, 76, 0.22);
+  --ia-diff-fg: #ffb0b0;
+  --ia-diff-solid: #ff8a8a;
+  --ia-diff-solid-fg: #2a1010;
+  --ia-warn-solid: #ffd08a;
+  --ia-warn-solid-fg: #2a1e08;
+  --ia-muted-solid: #3a424e;
+  --ia-muted-solid-fg: #c9d1dc;
+  --ia-warn-bg: rgba(214, 132, 20, 0.22);
+  --ia-warn-fg: #ffd08a;
+  --ia-muted-bg: #2a303a;
+  --ia-muted-fg: #9aa2ae;
+  --ia-code-bg: #171b21;
+}
+
 html,
 body,
 #root {
@@ -8,130 +83,78 @@ body,
 
 body {
   margin: 0;
-  font-family: -apple-system, 'Segoe UI', Roboto, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  font-family: 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', Inter, system-ui, -apple-system, sans-serif;
   font-size: 13px;
-  color: rgba(0, 0, 0, 0.88);
-  background:
-    radial-gradient(1100px 560px at 84% -12%, rgba(124, 92, 255, 0.09), transparent 62%),
-    radial-gradient(900px 520px at 4% -6%, rgba(19, 194, 194, 0.09), transparent 58%),
-    linear-gradient(180deg, #f7f9fc 0%, #f2f4f8 100%);
+  line-height: 1.6;
+  color: var(--ia-text);
+  background: var(--ia-bg);
   -webkit-font-smoothing: antialiased;
 }
 
-/* ============ 金额 / 号码 / 单号 / trace id —— 等宽（规范 §1.2） ============ */
+/* ============ 等宽（金额 / 税号 / 发票号 / 单号 / trace id / token） ============ */
 .mono {
-  font-family: Consolas, 'SFMono-Regular', Menlo, monospace;
+  font-family: 'JetBrains Mono', 'SF Mono', Consolas, Menlo, monospace;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.2px;
 }
 
-/* ============ 科技感背景层：网格 + 光晕 ============ */
-.ia-bg-layer {
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  background-image:
-    linear-gradient(to right, rgba(22, 119, 255, 0.055) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(22, 119, 255, 0.055) 1px, transparent 1px);
-  background-size: 34px 34px;
-  -webkit-mask-image: radial-gradient(1250px 720px at 72% -8%, #000 28%, transparent 80%);
-  mask-image: radial-gradient(1250px 720px at 72% -8%, #000 28%, transparent 80%);
-}
-
-.ia-bg-beam {
-  position: fixed;
-  top: -140px;
-  right: 8%;
-  width: 420px;
-  height: 420px;
-  z-index: 0;
-  pointer-events: none;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(124, 92, 255, 0.16) 0%, transparent 68%);
-  filter: blur(6px);
-  animation: ia-float 14s ease-in-out infinite;
-}
-
-@keyframes ia-float {
-  0%,
-  100% {
-    transform: translate3d(0, 0, 0);
-    opacity: 0.85;
-  }
-  50% {
-    transform: translate3d(-26px, 22px, 0);
-    opacity: 1;
-  }
-}
-
 /* ============ 页面容器 ============ */
-/*
- * 默认：自然高度，由 Content（overflow:auto）统一滚动 —— 普通后台页面用这套。
- * 需要「撑满视口 + 卡片内部滚动」的应用壳页面（复核台 / 运行台账）加 .page-root--fill。
- */
 .page-root {
   position: relative;
-  z-index: 1;
   flex: 0 0 auto;
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
+/* 应用壳页面（复核台 / 台账）：撑满视口 + 卡片内部滚动 */
 .page-root--fill {
   flex: 1 1 auto;
   min-height: 0;
 }
 
-/* ============ 卡片 ============ */
+/* ============ 卡片：0.5px 细边分层，不用阴影（§2.5） ============ */
 .ia-card {
   position: relative;
-  border: 1px solid #f0f0f0;
-  background: rgba(255, 255, 255, 0.92);
-  backdrop-filter: blur(8px);
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 10px 28px rgba(16, 24, 40, 0.05);
-  transition: box-shadow 0.2s ease;
+  border: 1px solid var(--ia-border);
+  border-radius: 10px;
+  background: var(--ia-container);
+  /* 显式给底色对应的前景色：避免深层组件继承到浅色模式残留的深色文字 */
+  color: var(--ia-text);
+  box-shadow: none;
 }
 
-.ia-card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 12px;
-  right: 12px;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(22, 119, 255, 0.35), transparent);
-  pointer-events: none;
-}
-
-.ia-card:hover {
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.05), 0 14px 36px rgba(16, 24, 40, 0.09);
-}
-
-/* AI 卡片：紫色描边 + 光晕 */
-.ia-card-ai {
-  border-color: #d6caff;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(243, 239, 255, 0.72) 100%);
-  box-shadow: 0 0 0 1px rgba(124, 92, 255, 0.1), 0 12px 32px rgba(124, 92, 255, 0.14);
-}
-
-.ia-card-ai::before {
-  background: linear-gradient(90deg, transparent, rgba(124, 92, 255, 0.55), transparent);
-}
-
-/*
- * 关键修复：antd v6 Card 根节点是 flex column + overflow:hidden，
- * .ant-card-body 默认 flex:0 1 auto（高度=内容高），
- * 高度受限时内容被裁切却不产生滚动条。
- * 让 head 固定、body 可伸缩，body 上声明 overflow:auto 才会真正滚动。
- */
 .ia-card.ant-card {
   min-height: 0;
+  /* flex / grid 子项默认 min-width:auto，表格会把卡片撑破并压到相邻列上 */
+  min-width: 0;
+}
+
+/* 表格永不撑破卡片：内容区自己横向滚动（否则宽表会越过卡片边界压住邻列） */
+.ia-card .ant-table-wrapper {
+  max-width: 100%;
+}
+
+.ia-card .ant-table-content,
+.ia-card .ant-table-body {
+  overflow-x: auto;
 }
 
 .ia-card > .ant-card-head {
   flex: 0 0 auto;
+  border-bottom: 1px solid var(--ia-split);
+  /* 卡片头高度由 token 算出来是小数（默认 40 / small 36.8），减去 1px 下边框后把 20.8 的行盒居中，
+     标题会落在半像素上：dpr=1 时 13px 中文整行被拆到两个物理行，看着就是发虚、往下塌。
+     这里把高度配成奇数、行高配成整数，让 (高度-1-行高)/2 正好落在整像素。 */
+  min-height: 39px;
+}
+
+.ia-card.ant-card-small > .ant-card-head {
+  min-height: 37px;
+}
+
+.ia-card .ant-card-head-title {
+  line-height: 20px;
 }
 
 .ia-card > .ant-card-body {
@@ -139,15 +162,189 @@ body {
   min-height: 0;
 }
 
-/* ============ 渐变文字 / AI 徽标 ============ */
-.ia-gradient-text {
-  background: linear-gradient(135deg, #69b1ff 0%, #b37feb 55%, #36cfc9 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  color: transparent;
+/* AI 区块：青色虚线框 —— 人机边界可见（§1 原则③） */
+.ia-card-ai {
+  border: 1px dashed var(--ia-ai);
+  border-radius: 10px;
+  background: var(--ia-ai-bg);
 }
 
+/* ============ 队列 / 记录选中态：左侧 3px 主色竖条 ============ */
+.ia-item {
+  position: relative;
+  cursor: pointer;
+  color: var(--ia-text);
+  border-left: 3px solid transparent;
+  border-radius: 4px;
+  transition: background 0.12s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.ia-item:hover {
+  background: var(--ia-header);
+}
+
+.ia-item-active,
+.ia-item-active:hover {
+  background: var(--ia-primary-soft);
+  border-left-color: var(--ia-primary);
+}
+
+.ia-row-clickable {
+  cursor: pointer;
+}
+
+/* ============ 表格行语义底（差异优先：彩色只留给异常） ============
+ * 深色下的语义底色是半透明的，而固定列要靠自身 background 盖住横向滚过来的邻列，
+ * 所以必须「不透明底 + 同色叠加层」两层画，否则邻列文字会从行底下透出来叠在一起。 */
+.ia-row-low-conf > td,
+.ia-row-diff > td,
+.ia-row-current > td,
+.ia-row-muted > td {
+  background-color: var(--ia-container) !important;
+}
+
+.ia-row-low-conf > td {
+  background-image: linear-gradient(var(--ia-warn-bg), var(--ia-warn-bg)) !important;
+}
+
+.ia-row-diff > td {
+  background-image: linear-gradient(var(--ia-diff-bg), var(--ia-diff-bg)) !important;
+}
+
+.ia-row-current > td {
+  background-image: linear-gradient(var(--ia-primary-soft), var(--ia-primary-soft)) !important;
+}
+
+.ia-row-muted > td {
+  color: var(--ia-text-3);
+}
+
+/* ============ 品牌 / 侧边 ============ */
+.ia-logo-mark {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  font-size: 15px;
+  color: #fff;
+  background: var(--ia-primary);
+}
+
+.ia-sider-group {
+  padding: 12px 14px 4px;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  color: var(--ia-text-3);
+}
+
+/* 选中态：左侧 3px 主色竖条 + 主色浅底 + 主色深字（§3.3） */
+.ia-menu.ant-menu-light .ant-menu-item-selected {
+  font-weight: 500;
+}
+
+.ia-menu.ant-menu-inline .ant-menu-item {
+  position: relative;
+  width: calc(100% - 16px);
+  margin-inline: 8px;
+}
+
+.ia-menu.ant-menu-inline .ant-menu-item-selected::before {
+  content: '';
+  position: absolute;
+  left: -8px;
+  top: 4px;
+  bottom: 4px;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  background: var(--ia-primary);
+}
+
+.ia-menu .ant-menu-item-group-title {
+  padding: 12px 16px 4px;
+  letter-spacing: 0.5px;
+  /* 字号与颜色由 Menu token 管，这里只补 token 没有的字重 */
+  font-weight: 600;
+}
+
+/* ============ 语义 Tag：浅底 + 同系深字 + 细边（§2.2），深浅色共用变量 ============ */
+.ia-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 6px;
+  font-size: 11px;
+  line-height: 17px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.ia-tag-pass {
+  background: var(--ia-pass-bg);
+  border-color: var(--ia-pass-fg);
+  color: var(--ia-pass-fg);
+}
+
+.ia-tag-diff {
+  background: var(--ia-diff-bg);
+  border-color: var(--ia-diff-fg);
+  color: var(--ia-diff-fg);
+}
+
+.ia-tag-warn {
+  background: var(--ia-warn-bg);
+  border-color: var(--ia-warn-fg);
+  color: var(--ia-warn-fg);
+}
+
+.ia-tag-muted {
+  background: var(--ia-muted-bg);
+  border-color: var(--ia-border);
+  color: var(--ia-muted-fg);
+}
+
+/* 优先级 chip：实心底才压得住队列里的密集文字，淡底描边在这里等于看不见 */
+.ia-tag-prio {
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 20px;
+  padding: 0 8px;
+  letter-spacing: 0.3px;
+}
+
+.ia-tag-solid.ia-tag-diff {
+  background: var(--ia-diff-solid);
+  border-color: var(--ia-diff-solid);
+  color: var(--ia-diff-solid-fg);
+}
+
+.ia-tag-solid.ia-tag-warn {
+  background: var(--ia-warn-solid);
+  border-color: var(--ia-warn-solid);
+  color: var(--ia-warn-solid-fg);
+}
+
+.ia-tag-solid.ia-tag-muted {
+  background: var(--ia-muted-solid);
+  border-color: var(--ia-muted-solid);
+  color: var(--ia-muted-solid-fg);
+}
+
+.ia-tag-info {
+  background: var(--ia-primary-soft);
+  border-color: var(--ia-primary);
+  color: var(--ia-primary);
+}
+
+.ia-tag-ai {
+  background: var(--ia-ai-bg);
+  border-color: var(--ia-ai);
+  color: var(--ia-ai-deep);
+}
+
+/* AI 徽标：AI 色（青）虚线胶囊 —— 与人操作的蓝色严格区分 */
 .ia-badge-ai {
   display: inline-flex;
   align-items: center;
@@ -156,117 +353,33 @@ body {
   padding: 0 9px;
   font-size: 11px;
   line-height: 18px;
-  color: #5b3fd6;
-  background: linear-gradient(135deg, #f3efff, #e6f4ff);
-  border: 1px solid #d6caff;
+  color: var(--ia-ai-deep);
+  background: var(--ia-ai-bg);
+  border: 1px dashed var(--ia-ai);
   border-radius: 10px;
   white-space: nowrap;
 }
 
-/* ============ 状态点 / 呼吸动画 ============ */
 .ia-dot {
   display: inline-block;
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #52c41a;
-  animation: ia-pulse 2s infinite;
+  background: var(--ia-pass-fg);
 }
 
 .ia-dot-ai {
-  background: #7c5cff;
+  background: var(--ia-ai);
 }
 
-@keyframes ia-pulse {
-  0% {
-    box-shadow: 0 0 0 0 rgba(82, 196, 26, 0.45);
-  }
-  70% {
-    box-shadow: 0 0 0 6px rgba(82, 196, 26, 0);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(82, 196, 26, 0);
-  }
+.ia-gradient-text {
+  color: var(--ia-ai-deep);
 }
 
-/* ============ 队列 / 记录选中态 ============ */
-.ia-item {
-  cursor: pointer;
-  border-left: 3px solid transparent;
-  transition: background 0.15s ease, box-shadow 0.15s ease;
-}
-
-.ia-item:hover {
-  background: #fafafa;
-}
-
-.ia-item-active {
-  background: linear-gradient(90deg, #e6f4ff, rgba(230, 244, 255, 0.4));
-  border-left-color: #1677ff;
-  box-shadow: inset 0 0 0 1px rgba(22, 119, 255, 0.18);
-}
-
-/* 可点击行（扫描件池：点行跳单据详情） */
-.ia-row-clickable {
-  cursor: pointer;
-}
-
-/* ============ 侧边栏品牌区 ============ */
-/* 渐变 Logo 标：蓝→紫对角渐变 + 内高光 + 外发光 */
-.ia-logo-mark {
-  display: grid;
-  place-items: center;
-  flex: 0 0 auto;
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
-  font-size: 19px;
-  color: #fff;
-  background: linear-gradient(135deg, #1677ff 0%, #7c5cff 100%);
-  box-shadow:
-    0 4px 14px rgba(83, 92, 255, 0.45),
-    inset 0 1px 0 rgba(255, 255, 255, 0.28);
-}
-
-/* 数字员工徽章：胶囊 chip，浅白描边 */
-.ia-worker-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  max-width: 100%;
-  padding: 2px 9px;
-  border-radius: 999px;
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.78);
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  white-space: nowrap;
-  overflow: hidden;
-}
-
-.ia-worker-chip .ia-dot {
-  width: 6px;
-  height: 6px;
-  flex: 0 0 auto;
-}
-
-/* ============ 表格行高亮 ============ */
-.ia-row-low-conf > td {
-  background: #fff7e6 !important;
-}
-
-.ia-row-diff > td {
-  background: #fff2f0 !important;
-}
-
-.ia-row-current > td {
-  background: #e6f4ff !important;
-}
-
-/* ============ 等宽内容块 ============ */
+/* ============ 等宽内容块（trace input / output） ============ */
 .ia-io-block {
-  background: #fafafa;
-  border: 1px solid #f0f0f0;
+  background: var(--ia-code-bg);
+  border: 1px solid var(--ia-border);
   border-radius: 4px;
   padding: 6px 8px;
   white-space: pre-wrap;
@@ -275,50 +388,74 @@ body {
   line-height: 1.6;
   max-height: 132px;
   overflow: auto;
+  color: var(--ia-text-2);
 }
 
-/* 深色终端风格（trace input/output） */
-.ia-io-block-dark {
-  background: #0b1b2e;
-  border-color: rgba(22, 119, 255, 0.35);
-  color: #a5dcff;
-  box-shadow: inset 0 0 24px rgba(22, 119, 255, 0.12);
-}
-
-/* ============ PDF 预览（react-pdf / pdf.js） ============ */
+/* ============ PDF 预览（pdf.js） ============ */
 .ia-pdf-page {
   max-width: 100%;
 }
 
 .ia-pdf-page canvas {
   display: block;
-  box-shadow: 0 2px 12px rgba(16, 24, 40, 0.14);
+  border: 1px solid var(--ia-border);
 }
 
-/* 文本层：允许选中复制票面文字 */
 .ia-pdf-page .react-pdf__Page__textContent {
   user-select: text;
   -webkit-user-select: text;
 }
 
-.ia-pdf-page .react-pdf__Page__annotations {
-  pointer-events: auto;
+/* 字段 ↔ 影像 bbox 联动高亮框（§5.3） */
+.ia-pdf-highlight {
+  position: absolute;
+  border: 2px solid var(--ia-primary);
+  border-radius: 2px;
+  background: rgba(42, 92, 224, 0.12);
+  pointer-events: none;
+  transition: all 0.12s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* ============ kbd ============ */
-kbd {
-  display: inline-block;
-  min-width: 16px;
+.ia-pdf-highlight::after {
+  content: attr(data-label);
+  position: absolute;
+  top: -18px;
+  left: 0;
   padding: 0 4px;
-  font-family: Consolas, monospace;
   font-size: 11px;
   line-height: 16px;
+  color: #fff;
+  background: var(--ia-primary);
+  border-radius: 2px;
+  white-space: nowrap;
+}
+
+/* ============ 键帽 ============ */
+kbd,
+.ia-kbd {
+  display: inline-block;
+  min-width: 18px;
+  padding: 0 4px;
+  font-family: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
+  font-size: 11px;
+  line-height: 17px;
   text-align: center;
-  color: rgba(0, 0, 0, 0.65);
-  background: #ffffff;
-  border: 1px solid #d9d9d9;
+  color: var(--ia-text-2);
+  background: var(--ia-container);
+  border: 1px solid var(--ia-border);
   border-bottom-width: 2px;
   border-radius: 4px;
+}
+
+/* ============ 焦点可见（WCAG AA，§9） ============ */
+:focus-visible {
+  outline: 2px solid var(--ia-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.ant-table-tbody > tr > td:focus-visible {
+  outline-offset: -2px;
 }
 
 /* ============ 滚动条 ============ */
@@ -331,37 +468,30 @@ kbd {
   border-radius: 3px;
 }
 .ia-scroll::-webkit-scrollbar-thumb:hover {
-  background: rgba(22, 119, 255, 0.35);
+  background: rgba(42, 92, 224, 0.4);
 }
 .ia-scroll::-webkit-scrollbar-track {
   background: transparent;
 }
 
-/* ============ Ant Design X 组件微调 ============ */.ant-thought-chain {
+/* ============ Ant Design X 微调 ============ */
+.ant-thought-chain {
   font-size: 12px;
 }
 
-.ant-thought-chain-box {
-  gap: 6px;
-}
-
 .ant-bubble .ant-bubble-content-filled {
-  background: linear-gradient(135deg, #f3efff 0%, #e6f4ff 100%) !important;
-  border: 1px solid #d6caff;
+  background: var(--ia-ai-bg) !important;
+  border: 1px dashed var(--ia-ai);
 }
 
-.ant-bubble-end .ant-bubble-content-filled {
-  background: linear-gradient(135deg, #1677ff 0%, #4096ff 100%) !important;
-  border-color: transparent;
-  color: #fff;
-}
-
-.ant-sender {
-  border-radius: 8px;
-  border-color: #d6caff;
-  box-shadow: 0 0 0 1px rgba(124, 92, 255, 0.08);
-}
-
-.ant-conversations-item-active {
-  background: linear-gradient(90deg, #e6f4ff, rgba(230, 244, 255, 0.4)) !important;
+/* ============ 动效：尊重 prefers-reduced-motion（§9） ============ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
