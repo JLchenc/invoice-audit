@@ -1,0 +1,21 @@
+# 环境变量
+.env
+# 测试数据（样本发票与 fixture 不入库，保留生成脚本）
+data/*
+!data/scripts/
+
+# 缓存文件
+.cache/
+*.pyc
+.venv/
+__pycache__/
+
+# 前端
+node_modules/
+web/dist/
+web/build.log
+.DS_Store
+
+# pdf.js 静态资源（cmaps/standard_fonts/image_decoders）
+# 由 web/package.json 的 postinstall 脚本从 node_modules/pdfjs-dist 自动生成
+web/public/pdfjs/

@@ -1,0 +1,332 @@
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, 'Segoe UI', Roboto, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  font-size: 13px;
+  color: rgba(0, 0, 0, 0.88);
+  background:
+    radial-gradient(1100px 560px at 84% -12%, rgba(124, 92, 255, 0.09), transparent 62%),
+    radial-gradient(900px 520px at 4% -6%, rgba(19, 194, 194, 0.09), transparent 58%),
+    linear-gradient(180deg, #f7f9fc 0%, #f2f4f8 100%);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ============ 金额 / 号码 / 单号 / trace id —— 等宽（规范 §1.2） ============ */
+.mono {
+  font-family: Consolas, 'SFMono-Regular', Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.2px;
+}
+
+/* ============ 科技感背景层：网格 + 光晕 ============ */
+.ia-bg-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(to right, rgba(22, 119, 255, 0.055) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(22, 119, 255, 0.055) 1px, transparent 1px);
+  background-size: 34px 34px;
+  -webkit-mask-image: radial-gradient(1250px 720px at 72% -8%, #000 28%, transparent 80%);
+  mask-image: radial-gradient(1250px 720px at 72% -8%, #000 28%, transparent 80%);
+}
+
+.ia-bg-beam {
+  position: fixed;
+  top: -140px;
+  right: 8%;
+  width: 420px;
+  height: 420px;
+  z-index: 0;
+  pointer-events: none;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(124, 92, 255, 0.16) 0%, transparent 68%);
+  filter: blur(6px);
+  animation: ia-float 14s ease-in-out infinite;
+}
+
+@keyframes ia-float {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+    opacity: 0.85;
+  }
+  50% {
+    transform: translate3d(-26px, 22px, 0);
+    opacity: 1;
+  }
+}
+
+/* ============ 页面容器 ============ */
+/*
+ * 默认：自然高度，由 Content（overflow:auto）统一滚动 —— 普通后台页面用这套。
+ * 需要「撑满视口 + 卡片内部滚动」的应用壳页面（复核台 / 运行台账）加 .page-root--fill。
+ */
+.page-root {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.page-root--fill {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* ============ 卡片 ============ */
+.ia-card {
+  position: relative;
+  border: 1px solid #f0f0f0;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 10px 28px rgba(16, 24, 40, 0.05);
+  transition: box-shadow 0.2s ease;
+}
+
+.ia-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 12px;
+  right: 12px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(22, 119, 255, 0.35), transparent);
+  pointer-events: none;
+}
+
+.ia-card:hover {
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.05), 0 14px 36px rgba(16, 24, 40, 0.09);
+}
+
+/* AI 卡片：紫色描边 + 光晕 */
+.ia-card-ai {
+  border-color: #d6caff;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(243, 239, 255, 0.72) 100%);
+  box-shadow: 0 0 0 1px rgba(124, 92, 255, 0.1), 0 12px 32px rgba(124, 92, 255, 0.14);
+}
+
+.ia-card-ai::before {
+  background: linear-gradient(90deg, transparent, rgba(124, 92, 255, 0.55), transparent);
+}
+
+/*
+ * 关键修复：antd v6 Card 根节点是 flex column + overflow:hidden，
+ * .ant-card-body 默认 flex:0 1 auto（高度=内容高），
+ * 高度受限时内容被裁切却不产生滚动条。
+ * 让 head 固定、body 可伸缩，body 上声明 overflow:auto 才会真正滚动。
+ */
+.ia-card.ant-card {
+  min-height: 0;
+}
+
+.ia-card > .ant-card-head {
+  flex: 0 0 auto;
+}
+
+.ia-card > .ant-card-body {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* ============ 渐变文字 / AI 徽标 ============ */
+.ia-gradient-text {
+  background: linear-gradient(135deg, #69b1ff 0%, #b37feb 55%, #36cfc9 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+.ia-badge-ai {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 20px;
+  padding: 0 9px;
+  font-size: 11px;
+  line-height: 18px;
+  color: #5b3fd6;
+  background: linear-gradient(135deg, #f3efff, #e6f4ff);
+  border: 1px solid #d6caff;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+
+/* ============ 状态点 / 呼吸动画 ============ */
+.ia-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #52c41a;
+  animation: ia-pulse 2s infinite;
+}
+
+.ia-dot-ai {
+  background: #7c5cff;
+}
+
+@keyframes ia-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(82, 196, 26, 0.45);
+  }
+  70% {
+    box-shadow: 0 0 0 6px rgba(82, 196, 26, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(82, 196, 26, 0);
+  }
+}
+
+/* ============ 队列 / 记录选中态 ============ */
+.ia-item {
+  cursor: pointer;
+  border-left: 3px solid transparent;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.ia-item:hover {
+  background: #fafafa;
+}
+
+.ia-item-active {
+  background: linear-gradient(90deg, #e6f4ff, rgba(230, 244, 255, 0.4));
+  border-left-color: #1677ff;
+  box-shadow: inset 0 0 0 1px rgba(22, 119, 255, 0.18);
+}
+
+/* ============ 表格行高亮 ============ */
+.ia-row-low-conf > td {
+  background: #fff7e6 !important;
+}
+
+.ia-row-diff > td {
+  background: #fff2f0 !important;
+}
+
+.ia-row-current > td {
+  background: #e6f4ff !important;
+}
+
+/* ============ 等宽内容块 ============ */
+.ia-io-block {
+  background: #fafafa;
+  border: 1px solid #f0f0f0;
+  border-radius: 4px;
+  padding: 6px 8px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-size: 12px;
+  line-height: 1.6;
+  max-height: 132px;
+  overflow: auto;
+}
+
+/* 深色终端风格（trace input/output） */
+.ia-io-block-dark {
+  background: #0b1b2e;
+  border-color: rgba(22, 119, 255, 0.35);
+  color: #a5dcff;
+  box-shadow: inset 0 0 24px rgba(22, 119, 255, 0.12);
+}
+
+/* ============ 发票原图占位：扫描线动效 ============ */
+.ia-scan {
+  position: relative;
+  overflow: hidden;
+  border: 1px dashed rgba(22, 119, 255, 0.45);
+  border-radius: 6px;
+  background: linear-gradient(180deg, #f7fbff, #eef4fb);
+}
+
+.ia-scan::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 34%;
+  background: linear-gradient(180deg, transparent, rgba(22, 119, 255, 0.16), transparent);
+  animation: ia-scan-move 3.2s linear infinite;
+}
+
+@keyframes ia-scan-move {
+  0% {
+    top: -34%;
+  }
+  100% {
+    top: 100%;
+  }
+}
+
+/* ============ kbd ============ */
+kbd {
+  display: inline-block;
+  min-width: 16px;
+  padding: 0 4px;
+  font-family: Consolas, monospace;
+  font-size: 11px;
+  line-height: 16px;
+  text-align: center;
+  color: rgba(0, 0, 0, 0.65);
+  background: #ffffff;
+  border: 1px solid #d9d9d9;
+  border-bottom-width: 2px;
+  border-radius: 4px;
+}
+
+/* ============ 滚动条 ============ */
+.ia-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.ia-scroll::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.16);
+  border-radius: 3px;
+}
+.ia-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(22, 119, 255, 0.35);
+}
+.ia-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ============ Ant Design X 组件微调 ============ */
+.ant-thought-chain {
+  font-size: 12px;
+}
+
+.ant-thought-chain-box {
+  gap: 6px;
+}
+
+.ant-bubble .ant-bubble-content-filled {
+  background: linear-gradient(135deg, #f3efff 0%, #e6f4ff 100%) !important;
+  border: 1px solid #d6caff;
+}
+
+.ant-bubble-end .ant-bubble-content-filled {
+  background: linear-gradient(135deg, #1677ff 0%, #4096ff 100%) !important;
+  border-color: transparent;
+  color: #fff;
+}
+
+.ant-sender {
+  border-radius: 8px;
+  border-color: #d6caff;
+  box-shadow: 0 0 0 1px rgba(124, 92, 255, 0.08);
+}
+
+.ant-conversations-item-active {
+  background: linear-gradient(90deg, #e6f4ff, rgba(230, 244, 255, 0.4)) !important;
+}
