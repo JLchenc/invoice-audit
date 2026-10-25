@@ -124,6 +124,13 @@ export default function Kb() {
               <Upload.Dragger
                 accept=".pdf,.docx,.md,.txt"
                 showUploadList={false}
+                beforeUpload={(file) => {
+                  if (!/\.(pdf|docx|md|txt)$/i.test(file.name)) {
+                    message.error(`「${file.name}」格式不支持（支持 PDF / Word / Markdown / TXT）`);
+                    return Upload.LIST_IGNORE;
+                  }
+                  return true;
+                }}
                 customRequest={async ({ file, onSuccess, onError }) => {
                   try {
                     const name = (file as File).name;

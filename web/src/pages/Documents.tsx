@@ -111,6 +111,21 @@ export default function Documents() {
   const [detailId, setDetailId] = useState<string | null>(null);
   const seq = useRef(100);
 
+  /* 上传闸门：accept 只约束文件选择器（可选"所有文件"绕过），真正的拦截在 beforeUpload；
+     与后端 P5 的 %PDF 魔数 + 20MB 校验同规则（前后端双重校验） */
+  const beforePdfUpload: UploadProps['beforeUpload'] = (file) => {
+    const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+    if (!isPdf) {
+      message.error(`「${file.name}」不是 PDF 文件，仅支持 PDF 票据`);
+      return Upload.LIST_IGNORE;
+    }
+    if (file.size > 20 * 1024 * 1024) {
+      message.error(`「${file.name}」超过 20MB 上限`);
+      return Upload.LIST_IGNORE;
+    }
+    return true;
+  };
+
   /* ---------- 上传：模拟进度 + 入池 + 走处理链路 ---------- */
   const customRequest: UploadProps['customRequest'] = (options) => {
     const { file, onProgress, onSuccess, onError } = options;
@@ -323,8 +338,9 @@ export default function Documents() {
       >
         <Dragger
           multiple
-          accept=".pdf"
+          accept=".pdf,application/pdf"
           showUploadList={false}
+          beforeUpload={beforePdfUpload}
           customRequest={customRequest}
           onChange={handleUploadChange}
           style={{ background: 'var(--ia-ai-bg)', borderColor: 'var(--ia-ai)' }}
