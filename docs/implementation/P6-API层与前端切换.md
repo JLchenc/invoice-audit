@@ -495,6 +495,7 @@ async def review_detail(item_id: int, session: AsyncSession = Depends(get_sessio
 class DecideIn(BaseModel):
     decision: str                    # 'approve' | 'reject'
     reason: str | None = None        # 驳回原因（S 键弹窗填的）
+    edits: dict[str, str] | None = None  # 人工修正字段（E 键改过的抽取值，key=field_name）——前端已传
 
 @router.post("/review-queue/{item_id}/decide")
 async def decide_review(item_id: int, body: DecideIn,
@@ -505,11 +506,38 @@ async def decide_review(item_id: int, body: DecideIn,
     rq = await session.get(ReviewQueue, item_id)
     if rq is None or rq.status != "pending":
         raise HTTPException(404, "队列项不存在或已决策")
+
+    # ① 人工修正优先落库：覆盖 invoice_fields 抽取值，来源改为 human_override（可审计红线）
+    if body.edits:
+        for field_name, new_val in body.edits.items():
+            fld = (await session.execute(
+                select(InvoiceField).where(
+                    InvoiceField.document_id == rq.document_id,
+                    InvoiceField.field_name == field_name,
+                )
+            )).scalar_one_or_none()
+            if fld is not None:
+                fld.field_value = new_val
+                fld.extractor = "human_override"
+
+    # ② 决策落库：队列项 + 单据状态
     rq.status = "approved" if body.decision == "approve" else "rejected"
     rq.decision, rq.decision_reason = body.decision, body.reason
     rq.decided_by, rq.decided_at = user, datetime.now()
     doc = await session.get(InvoiceDocument, rq.document_id)
     doc.status = "matched" if body.decision == "approve" else "rejected"
+
+    # ③ 留痕：写一条 trace_records（human 决策 + 规则版本号），对齐 PRD「双层可审计」；
+    #    字段名以你 P1 的 TraceRecord model 为准，rule_version 取该单判定依据的规则版本
+    session.add(TraceRecord(
+        document_id=rq.document_id,
+        step="L6_human_decision",
+        actor=user,
+        decision=body.decision,
+        reason=body.reason,
+        created_at=datetime.now(),
+    ))
+
     await session.commit()
     return {"ok": True, "status": rq.status}
 ```
@@ -545,6 +573,30 @@ async def list_documents(session: AsyncSession = Depends(get_session)):
 ### 4) `admin.py`（控制面：providers / rules / traces / dashboard）
 
 ```python
+# ---------- admin.py 文件头（P1 空壳的 router 声明保留，import 换成这份） ----------
+from collections import Counter
+from datetime import date, datetime
+from decimal import Decimal
+
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.biz import REASON_LABELS, _fields_map, fmt_dt
+from app.api.deps import get_current_user
+from app.api.schemas import (ProviderRecordOut, RuleConfigOut, RuleImpactOut,
+                             RuleVersionOut, TraceOut, TraceStepOut)
+from app.core.config import get_settings
+from app.core.security import decrypt_value
+from app.db.base import get_session
+from app.models.app_models import InvoiceDocument, MatchResult, ReviewQueue
+from app.models.ctrl_models import (EvalRun, KbChunk, KbDocument, LlmProvider,
+                                    LlmUsage, RuleVersion, TraceRecord)
+from app.pipeline.runner import _json_safe
+from app.pipeline.rules import DEFAULT_RULES
+
+router = APIRouter(prefix="/api", tags=["admin"])
+
 # ---------- GET /api/providers（Key 永不明文出库：解密只为取尾4位掩码） ----------
 @router.get("/providers", response_model=list[ProviderRecordOut])
 async def list_providers(session: AsyncSession = Depends(get_session)):
@@ -638,7 +690,7 @@ async def publish_rules(patch: dict, session: AsyncSession = Depends(get_session
     })
     old = current.version if current else "v0.9.0"
     minor = int(old.split(".")[1]) + 1
-    new_version = f"v{old.split('.')[0]}.{minor}.0"
+    new_version = f"{old.split('.')[0]}.{minor}.0"   # split 首段已含 "v"，别再补
     if current:                                   # 只允许一个 published
         current.status = "rolled_back"
     session.add(RuleVersion(version=new_version, rules=rules, status="published",

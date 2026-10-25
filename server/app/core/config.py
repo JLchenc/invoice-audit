@@ -23,6 +23,12 @@ class Settings(BaseSettings):
     redis_url:str="redis://localhost:6380/0"
     fernet_key:str=""
     extractor: str = "llm"   # "llm" | "parser"，环境变量 EXTRACTOR 注入
+    admin_user:str="admin"
+    admin_password:str="admin123"   #demo默认，.env覆盖
+    auth_enabled:bool=False         # 前端还没有登陆页，先关；true时全部/api校验
+    token_secret:str="dev-secret-change-me"
+    token_expire_hours:int=12
+
 
 # get_settings() 全局唯一取配置入口；lru_cache 保证只取一次
 @lru_cache()

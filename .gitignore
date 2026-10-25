@@ -28,3 +28,6 @@ web/scripts/tmp-*.mjs
 web/shot-*.png
 web/vite-smoke.log
 web/vite-smoke.err
+
+# 临时接口调试载荷
+server/body.json
