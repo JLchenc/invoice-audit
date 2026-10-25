@@ -1,7 +1,7 @@
 # P2 LLM 客户端 + Key 加密（0.5 天）
 
 > 本文是 [后端实施总览](../BACKEND-PLAN.md) 的 **P2 拆分文档**：阶段正文 + 对应附录放在一起。
-> 上一步：[P1 数据层](./P1-数据层.md) ｜ 下一步：P3 规则引擎（见总览）
+> 上一步：[P1 数据层](./P1-数据层.md) ｜ 下一步：[P3 规则引擎](./P3-规则引擎.md)
 
 
 ## 步骤
@@ -199,11 +199,14 @@ async def get_active_client() -> AsyncLLMClient:
             raise RuntimeError("没有激活的 LLM provider，请先在 ctrl.llm_providers 注册")
         # 关键：从密文解密出明文 key 才交给客户端；明文只活在内存，不写日志/不回前端
         api_key = decrypt_value(row.api_key_enc, settings.fernet_key)
-        return AsyncLLMClient(
+        client = AsyncLLMClient(
             base_url=row.base_url,
             api_key=api_key,
             model=row.model,
         )
+        client.provider_name = row.name   # 第 4 节能力探测要用
+        client.provider_id = row.id       # 写 llm_usage 时满足外键
+        return client
 
 
 def cost_cny(prompt_tokens: int, completion_tokens: int,
@@ -238,7 +241,7 @@ async def record_usage(
         await session.commit()
 ```
 
-**需在模型补的两列**（P1 的 `LlmProvider` 没有，P2 必须加；加完记得 `alembic revision --autogenerate -m "add provider pricing"` 并 `upgrade head`）：
+**需在模型补的两列**（P1 的 `LlmProvider` 没有，P2 必须加；加完记得 `uv run alembic revision --autogenerate -m "add provider pricing"` 并 `uv run alembic upgrade head`，两条都要在 `server` 目录下执行）：
 
 ```python
 # app/models/ctrl_models.py 的 LlmProvider 里追加：
@@ -249,7 +252,7 @@ price_out_per_1k = mapped_column(Numeric(10, 6), nullable=False, server_default=
 
 ### 4) 能力探测（response_format 兼容）
 
-不是每家都支持 `response_format={"type":"json_object"}`：
+不是每家都支持 `response_format={"type":"json_object"}`。下面这段追加在 `server/app/core/llm_client.py` 末尾（`AsyncLLMClient` 类之后，模块级）：
 
 ```python
 """
@@ -268,7 +271,7 @@ def build_response_format(provider_name: str) -> dict | None:
 ### 5) `server/scripts/smoke_llm.py`（冒烟验收）
 
 ```python
-"""
+r"""
 冒烟测试：用库里激活的 provider 发一次真实请求，验证
 「能发 / 能统计 token / 能算成本 / 能记 usage」整条链路。
 
@@ -277,12 +280,19 @@ def build_response_format(provider_name: str) -> dict | None:
     uv run python scripts/smoke_llm.py
 
 切换 provider 重测：把另一家的 is_active 改成 true，再跑一次，代码零改。
+注意 docstring 开头的 r：没有它，D:\project 里的 \p 会被当成非法转义报 SyntaxWarning。
 """
+# 直接跑脚本时 Python 只把 scripts/ 放进搜索路径，手动补上 server/ 才能 import app 包
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import asyncio
 from decimal import Decimal
 
 from app.core.providers import get_active_client, cost_cny, record_usage
-from app.core.llm_client import LLMResult
+from app.core.llm_client import LLMResult, build_response_format
 
 
 async def main():
@@ -291,8 +301,11 @@ async def main():
         {"role": "system", "content": "你是发票字段抽取助手，只输出 JSON。"},
         {"role": "user", "content": "这张发票的发票号码是多少？请只返回 {\"invoice_no\": \"...\"}"},
     ]
-    # 先试强约束；若 provider 不支持 json_object，把 response_format 传 None（见第 4 节）
-    result: LLMResult = await client.chat(messages, response_format={"type": "json_object"})
+    # 能力探测：支持 json_object 的走强约束，不支持的传 None 靠 prompt 约束（见第 4 节）
+    result: LLMResult = await client.chat(
+        messages,
+        response_format=build_response_format(client.provider_name),
+    )
 
     # 假设施测 provider 定价（示例值，按官网实际填进 ctrl.llm_providers）
     price_in = Decimal("0.001")   # 1 元/百万输入 token
@@ -306,8 +319,8 @@ async def main():
     print("耗时(ms):", result.latency_ms)
     print("本次成本(元):", cost)
 
-    # 记一笔用量（run_id 冒烟场景随便给个 0）
-    await record_usage(provider_id=0, run_id=0,
+    # 记一笔用量；provider_id 必须用真实行的 id（有外键），run_id 冒烟场景随便给个 0
+    await record_usage(provider_id=client.provider_id, run_id=0,
                        prompt_tokens=result.prompt_tokens,
                        completion_tokens=result.completion_tokens, cost=cost)
     print("已写入 ctrl.llm_usage 一条")
@@ -325,12 +338,62 @@ if __name__ == "__main__":
 | tongyi（通义千问） | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `qwen-plus` |
 | zhipu（智谱 GLM） | `https://open.bigmodel.cn/api/paas/v4` | `glm-4-flash` |
 
-注册示例（往 `ctrl.llm_providers` 插一行，`api_key_enc` 用 security 加密后的值）：
+注册示例（往 `ctrl.llm_providers` 插一行，`api_key_enc` 用 security 加密后的值）。文档原来只给了加密那一行，不够跑通；完整脚本存为 `server/scripts/register_provider.py`：
 
 ```python
-from app.core.security import encrypt_value
+# 注册一条 provider 到库里（Key 加密落库，明文只活在内存）
+# 运行：cd D:/project/agent/invoice-audit/server
+#       uv run python scripts/register_provider.py
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+import asyncio
+from decimal import Decimal
+
+from sqlalchemy import select
+
 from app.core.config import get_settings
-enc = encrypt_value("sk-你的真实key", get_settings().fernet_key)
+from app.core.security import encrypt_value
+from app.db.base import SessionLocal
+from app.models.ctrl_models import LlmProvider
+
+# ↓↓↓ 改这六行即可 ↓↓↓
+NAME = "deepseek"
+BASE_URL = "https://api.deepseek.com/v1"
+MODEL = "deepseek-chat"
+API_KEY = "sk-你的真实key"      # 明文只在内存，落库前 encrypt_value
+PRICE_IN = Decimal("0.001")    # 元/千输入 token，按官网价填
+PRICE_OUT = Decimal("0.002")
+
+
+async def main() -> None:
+    settings = get_settings()
+    async with SessionLocal() as session:
+        exists = (await session.execute(
+            select(LlmProvider).where(LlmProvider.name == NAME)
+        )).scalars().first()
+        if exists is not None:
+            print(f"{NAME} 已存在（id={exists.id}），跳过注册")
+            return
+        session.add(LlmProvider(
+            name=NAME, base_url=BASE_URL, model=MODEL,
+            api_key_enc=encrypt_value(API_KEY, settings.fernet_key),
+            is_active=True,
+            price_in_per_1k=PRICE_IN, price_out_per_1k=PRICE_OUT,
+        ))
+        await session.commit()
+        print(f"{NAME} 已注册并激活")
+
+
+asyncio.run(main())
+```
+
+注册后核查（应能看到一行且 is_active = t）：
+
+```bash
+docker exec -it invoice-pg psql -U invoice -d invoice_audit -c "SELECT id,name,model,is_active FROM ctrl.llm_providers;"
 ```
 
 ### P2 验收
@@ -366,4 +429,4 @@ docker exec -it invoice-pg psql -U invoice -d invoice_audit -c "SELECT provider_
 
 ---
 
-> 返回：[总览](../BACKEND-PLAN.md) ｜ 上一步：[P1 数据层](./P1-数据层.md)
+> 返回：[总览](../BACKEND-PLAN.md) ｜ 上一步：[P1 数据层](./P1-数据层.md) ｜ 下一步：[P3 规则引擎](./P3-规则引擎.md)

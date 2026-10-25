@@ -31,7 +31,12 @@
 | P0 | [implementation/P0-环境与骨架.md](./implementation/P0-环境与骨架.md) | 步骤 + 常见坑 + 附录（config / security / db / main / 启动验收） | ✅ 已完成 |
 | P1 | [implementation/P1-数据层.md](./implementation/P1-数据层.md) | 步骤 + 清单 + 常见坑 + 附录（模型 / Alembic / seed） | ✅ 已完成 |
 | P2 | [implementation/P2-LLM客户端与Key加密.md](./implementation/P2-LLM客户端与Key加密.md) | 步骤 + 常见坑 + 附录（llm_client / providers / 成本 / 冒烟） | ⬜ 待开工 |
-| P3~P6 | 见本文下方「后续阶段」 | 仅计划，尚未展开附录 | ⬜ 待开工 |
+| P3 | [implementation/P3-规则引擎.md](./implementation/P3-规则引擎.md) | 步骤 + 清单 + 常见坑 + 附录（rules 纯函数 / 大写金额 / 单测 / 50 样本回放） | ⬜ 待开工（附录代码已实测 50/50） |
+| P4 | [implementation/P4-Agent链路L1-L3.md](./implementation/P4-Agent链路L1-L3.md) | 步骤 + 清单 + 常见坑 + 附录（layout / prompt-as-code / extract 双模式 / runner + trace） | ⬜ 待开工 |
+| P5 | [implementation/P5-队列与双入口.md](./implementation/P5-队列与双入口.md) | 步骤 + 清单 + 常见坑 + 附录（arq worker / 上传入队 / seed_documents / run-batch） | ⬜ 待开工 |
+| P6 | [implementation/P6-API层与前端切换.md](./implementation/P6-API层与前端切换.md) | 步骤 + 清单 + 常见坑 + 附录（DTO / 鉴权 / biz+admin 路由 / USE_MOCK 切换） | ⬜ 待开工 |
+| W3·F15 | [implementation/W3-知识库与RAG.md](./implementation/W3-知识库与RAG.md) | 步骤 + 清单 + 常见坑 + 附录（embedding 回填 / 混合检索 RRF / RAG 问答 / 上传向量化 / ai_summary） | ⬜ 待开工 |
+| W3·F8 | [implementation/W3-评测中心与收尾.md](./implementation/W3-评测中心与收尾.md) | 步骤 + 清单 + 常见坑 + 附录（eval_cases 导入 / 异步评测 / 门禁与版本对比 / 规则回滚 / 评估报告 / DoD 对照） | ⬜ 待开工 |
 | 设计解读 | [DB-DESIGN.md](./DB-DESIGN.md) | 建表策略 / 字段取舍 / 扩展性（面试用） | — |
 | 产品需求 | [PRD.md](./PRD.md) | 含 §7 DDL 定稿 | — |
 
@@ -55,6 +60,8 @@
 
 ## P3 规则引擎（1 天）——先于 LLM，当天可全绿
 
+> 📄 详细拆分文档：[P3-规则引擎.md](./implementation/P3-规则引擎.md)（含归因编码↔outcome↔priority 全集表、已在 50 份样本上回放验证 50/50 的参考实现，以及作者实测踩过的两个「即停/判重」坑）
+
 ### 步骤
 
 1. **`pipeline/rules.py` 全部纯函数**，不 import 任何 DB/LLM：
@@ -75,6 +82,8 @@
 ---
 
 ## P4 Agent 链路 L1~L3（1.5 天）
+
+> 📄 详细拆分文档：[P4-Agent链路L1-L3.md](./implementation/P4-Agent链路L1-L3.md)（含四版式文本层实测事实卡、parser 正则的 50 样本命中率实测、runner 把 L4/L5 提前接线的说明）
 
 ### 步骤
 
@@ -102,6 +111,8 @@
 
 ## P5 队列 + 双入口（0.5 天）
 
+> 📄 详细拆分文档：[P5-队列与双入口.md](./implementation/P5-队列与双入口.md)（含队列/worker/cron 的前端类比对照、Windows 兼容性实测结论、重复票判定与并发的取舍）
+
 ### 步骤
 
 1. **arq**：`workers/worker.py` 定义 `async def process_document(ctx, document_id)`——从 DB 读文件路径，调 `runner`，回写状态（matched/review/exception）
@@ -115,6 +126,8 @@
 ---
 
 ## P6 API 层（1 天）
+
+> 📄 详细拆分文档：[P6-API层与前端切换.md](./implementation/P6-API层与前端切换.md)（含前端函数↔路由↔数据来源对照表、单位换算表、camelCase DTO 约定、`USE_MOCK=false` 切换清单）
 
 ### 步骤
 
@@ -130,10 +143,23 @@
 
 ---
 
-## W2 / W3 预告（不展开，对齐 PRD）
+## W2 / W3 说明
 
-- **W2**：L4 三单匹配（P3 的 `match_three_way` 接 DB）+ L5 分流 + L6 复核队列 API + 工作台三栏对接 + 定时任务上线
-- **W3**：评测中心（评估集导入 → 异步跑 → 指标看板 → 版本对比 + 发布门禁）、仪表盘聚合、kb 文档上传/检索/问答、评估报告
+**W2 的内容已在 P4~P6 拆分文档中提前落地**（为了让各阶段验收自洽，原定 W2 的活被拆进了相邻阶段）：
+
+| 原 W2 计划项 | 实际落在 |
+| --- | --- |
+| L4 三单匹配接 DB | [P4](./implementation/P4-Agent链路L1-L3.md)（runner 里查三张表 + 调 P3 纯函数） |
+| L5 分流 | [P4](./implementation/P4-Agent链路L1-L3.md)（match_results + review_queue 落库） |
+| L6 复核队列 API | [P6](./implementation/P6-API层与前端切换.md)（/review-queue 列表/详情/decide） |
+| 工作台三栏对接 | [P6](./implementation/P6-API层与前端切换.md)（USE_MOCK=false） |
+| 定时任务上线 | [P5](./implementation/P5-队列与双入口.md)（cron 23:00 + run-batch） |
+| 规则回滚（F9 尾巴） | [W3-评测中心与收尾](./implementation/W3-评测中心与收尾.md) |
+
+**W3 拆成两篇文档**：
+
+- **[W3·F15 知识库与 RAG](./implementation/W3-知识库与RAG.md)**：embedding 回填（P1 留的 NULL）→ 混合检索（向量 ⊕ 关键词，RRF）→ RAG 问答（无引用拒答红线）→ 文档上传/升版 → L5 的 ai_summary 带引用归因建议
+- **[W3·F8 评测中心与收尾](./implementation/W3-评测中心与收尾.md)**：评估集导入（50 张 + 10 条 qa 用例）→ arq 异步评测 → 指标看板（字段准确率/自动通过率/归因正确率/qa 命中率）→ 门禁 + 版本对比 + 规则回滚 → 评估报告 → PRD §10 DoD 全项对照（v1.0 收官）
 
 ---
 
