@@ -11,16 +11,19 @@ embedding 列先留 NULL（等 P2 有了 LLM client 再回填向量）。
 Python 会把 `\\p`、`\\a` 当成转义序列，报 SyntaxWarning: invalid escape sequence。
 想在 docstring 里写反斜杠，就把开头的三引号前面加个 r，变成原始字符串。
 """
-import asyncio
-import json
-from datetime import date
-from decimal import Decimal
-from pathlib import Path
+import asyncio                 # 异步入口运行器（脚本世界里的 main runner）
+import json                    # 读 data/*.json 的 fixture
+from datetime import date      # JSON 里的日期字符串要转成 date 对象才能进 DATE 列
+from decimal import Decimal    # JSON 里的金额 float 要转 Decimal 才能进 NUMERIC 列
+from pathlib import Path       # 定位项目根 / data 目录
 
+# Date/Numeric 用于按列类型做"日期/金额"清洗判断；select 查表是否已有数据（幂等）
 from sqlalchemy import Date, Numeric, select
 
-from app.db.base import SessionLocal
+from app.db.base import SessionLocal   # 会话工厂（脚本自建会话，不走 FastAPI 注入）
+# 三单主数据的 ORM 模型：采购订单 / 入库单 / 合同
 from app.models.app_models import PurchaseOrder, GoodsReceipt, Contract
+# 知识库的 ORM 模型：文档 + 分块（embedding 留 NULL，等 P2 有 client 再回填）
 from app.models.ctrl_models import KbDocument, KbChunk
 
 # 路径解析：本文件在 server/scripts/seed.py

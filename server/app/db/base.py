@@ -1,10 +1,12 @@
-# SQLAlchemy 异步三件套
-# AsyncSession 一次数据库会话（类比Promise 的一次 client.xxx 调用上下文）
-# async_sessionmaker 会话工厂，生产 AsyncSession  实例
-
+# SQLAlchemy 异步三件套：
+#   create_async_engine —— 引擎：管理数据库连接池（类比 PrismaClient 实例）
+#   async_sessionmaker  —— 会话工厂，生产 AsyncSession
+#   AsyncSession        —— 一次数据库会话（≈ 一次事务作用域，commit 才真正落盘）
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+# DeclarativeBase：ORM 模型类的基类，所有表模型都继承它
 from sqlalchemy.orm import DeclarativeBase
 
+# 项目配置（读 .env，拿到 DATABASE_URL）
 from app.core.config import get_settings    
 
 _settings=get_settings()

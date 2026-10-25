@@ -13,15 +13,16 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+    restart: unless-stopped
   redis:
     image: redis:7-alpine
     container_name: invoice-redis
-    ports: ["6380:6379"]          # 宿主机 6379 已被本地 redis 占用，容器对外用 6380
+    ports: ["6380:6379"] # 宿主机 6379 已被本地 redis 占用，容器对外用 6380
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 10
-
+    restart: unless-stopped
 volumes:
   pgdata:

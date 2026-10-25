@@ -1,16 +1,19 @@
 # 控制面 ctrl schema 的 8 张表：provider/key、规则版本、评测、trace、知识库。
 # 注意 llm_usage.run_id 故意不建外键到 trace_records（见正文常见坑）。
 
-from datetime import date, datetime
-from uuid import uuid4
+from datetime import date, datetime   # date → DATE 列（有效期）；datetime → TIMESTAMPTZ 列
+from uuid import uuid4                # Python 侧生成 UUID 默认值（trace_id 用）
 
+# SQLAlchemy 通用类型（含义同 app_models.py；多出的 Boolean 布尔、ARRAY 前置在下一行）
 from sqlalchemy import BigInteger, Boolean, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, func, text
+# PostgreSQL 专属类型：ARRAY 数组(TEXT[]) | JSONB 结构化 JSON | UUID 数据库原生 UUID 类型
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID as PG_UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column   # 2.x 新式列声明写法
 
 from app.db.base import Base
 # pgvector 提供的 Vector 类型，把 embedding 列映射成 PostgreSQL 的 vector 类型
 from pgvector.sqlalchemy import Vector
+
 
 
 # 1) LLM provider 与 Key（api_key_enc 是加密后的 key，明文不落库；加密见 P2 security.py）
@@ -25,7 +28,8 @@ class LlmProvider(Base):
     api_key_enc = mapped_column(String, nullable=False)        # 加密存储
     is_active = mapped_column(Boolean, nullable=False, server_default=text("true"))
     created_at = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-
+    price_in_per_1k=mapped_column(Numeric(10,6),nullable=False,server_default=text("0"))    # 元/千输入 token
+    price_out_per_1k=mapped_column(Numeric(10,6),nullable=False,server_default=text("0"))   # 元/千输出 token
 
 # 2) 用量与成本统计
 class LlmUsage(Base):

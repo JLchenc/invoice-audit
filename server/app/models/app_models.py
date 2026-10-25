@@ -1,16 +1,19 @@
 # 本文件定义【业务数据 app schema】的7张表
 # 类比前端：和数据库表意一对应的typescript interface；只是这里每个类=一张表
 
-from datetime import date, datetime
+from datetime import date, datetime   # date 映射 DATE 列；datetime 映射 TIMESTAMPTZ 列
 
-# SQLAlchemy 2.x 核心工具
+# SQLAlchemy 2.x 核心类型与工具（每个名字对应一种列类型/约束）：
+#   BigInteger 大整数主键 | Date/DateTime 日期/时间戳 | ForeignKey 外键 | Index 二级索引
+#   Numeric 定点小数（钱专用，禁 float）| String/Text 文本 | func/text 写服务端默认值（DEFAULT now() 等）
 from sqlalchemy import BigInteger,Date,DateTime,ForeignKey,Index,Integer,Numeric,String,Text,func,text
 
 # JSONB 是 Postgres 的 JSON 类型，支持索引，要从dialects.postgresql 导入
 from sqlalchemy.dialects.postgresql import JSONB
+# Mapped/mapped_column 是 SQLAlchemy 2.x 的新式写法：类属性名 = 列名，带类型推断
 from sqlalchemy.orm import Mapped, mapped_column
 
-# 全库唯一的 ORM 基类，（在app/db/base.py 中定义，所有表都继承它）  
+# 全库唯一的 ORM 基类，（在app/db/base.py 中定义，所有表都继承它）
 from app.db.base import Base
 
 # 1.扫面件池：每张上传/调度的发票扫描件一条记录
@@ -27,6 +30,8 @@ class InvoiceDocument(Base):
     uploaded_by=mapped_column(String)
     created_at=mapped_column(DateTime(timezone=True),server_default=func.now(),nullable=False)
     processed_at=mapped_column(DateTime(timezone=True))
+    pages = mapped_column(Integer)   # L1 解析出的页数，前端扫描件池要展示
+    retry_count = mapped_column(Integer, nullable=False, server_default=text("0"))
 
 
 # 2.抽取字段：字段级置信度，可追溯每次抽取来源

@@ -20,25 +20,33 @@ from app.api import admin,biz
 from app.core.config import get_settings
 from app.db.base import engine
 
+# arq：基于 Redis 的异步任务队列库（类比 Node 的 BullMQ）。
+# create_pool 建"入队客户端"——API 进程只负责把任务丢进 Redis 队列，真正执行在 worker 进程
+from arq import create_pool
+# RedisSettings：arq 自己的 Redis 连接配置对象（和上面 redis-py 的客户端是两套东西）
+from arq.connections import RedisSettings
+
 # 读取配置（其实就是读.env 那一堆地址）
 settings=get_settings()
 
-# 生命周期：应用启动时创建一个 Redis 连接挂到 app 上；关闭时释放
-# 类比前端：应用挂在是初始化一个全局的 WebCocket 连接
+# 生命周期：应用启动时创建 Redis / arq 连接挂到 app 上；关闭时按依赖顺序释放
+# 类比前端：应用挂载时初始化一个全局 Websocket 连接，卸载时断开
 
 @asynccontextmanager
 async def lifespan(app:FastAPI):
     app.state.redis=aioredis.from_url(settings.redis_url,decode_responses=True)
+    app.state.arq = await create_pool(RedisSettings.from_dsn(settings.redis_url))  # 入队连接池
     yield # 应用正常运行时停在这里
+    await app.state.arq.close()                     # ← 新增
     await app.state.redis.aclose()
     await engine.dispose()  # 关闭数据库连接池
 
 # 创建 FastAPI 实例，挂载路由，绑定上面的生命周期钩子
 app=FastAPI(
-    title="发票智审 InoiceAudit API",
+    title="发票智审 InvoiceAudit API",
     description="应付核算数字员工（工号 AP-001）· api/biz 业务面 + api/admin 控制面",
     version="0.0.1",
-    lifespan=lifespan   
+    lifespan=lifespan
 )
 
 # 跨域：允许前端开发服务器（Vite 默认 5173 端口）访问本后端
@@ -74,7 +82,7 @@ async def healthz():
     except Exception as exc:
         checks["redis"]=False
         checks["redis_error"]=str(exc)
-    
+
     # 两个都 true 才算ok,否则degraded(降级)
     ok=bool(checks.get("db")) and checks.get("redis")
-    return {"status":"ok" if ok else "degreaded",**checks}
+    return {"status":"ok" if ok else "degraded",**checks}
