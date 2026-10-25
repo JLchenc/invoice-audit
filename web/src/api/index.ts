@@ -32,7 +32,7 @@ import { traceRecords } from '@/mock/traces';
 import { kbDocuments, searchKbMock } from '@/mock/kb';
 
 /** 后端就绪后置为 false */
-export const USE_MOCK = true;
+export const USE_MOCK = false;
 
 const BASE = '/api';
 
@@ -48,13 +48,32 @@ export class ApiError extends Error {
   }
 }
 
-/** 鉴权 token 来源：登录后写入 localStorage，这里统一注入；没有则不带 */
+/** 鉴权 token 来源：登录后按「记住我」写入 localStorage 或 sessionStorage，这里统一注入；没有则不带 */
 function getToken(): string | null {
   try {
-    return localStorage.getItem('ia_token');
+    return localStorage.getItem('ia_token') ?? sessionStorage.getItem('ia_token');
   } catch {
     return null;
   }
+}
+
+/**
+ * 会话失效闭环（设计文档 §2.2）：清掉两处存储的凭据，带来源路径跳登录页。
+ * 在 /login、/register 上不跳（避免死循环）；登录接口自身不走本文件，其 401 由页面处理。
+ */
+function handleUnauthorized() {
+  try {
+    localStorage.removeItem('ia_token');
+    localStorage.removeItem('ia_user');
+    sessionStorage.removeItem('ia_token');
+    sessionStorage.removeItem('ia_user');
+  } catch {
+    /* 忽略隐私模式下的 localStorage 异常 */
+  }
+  const { pathname, search } = window.location;
+  if (pathname.startsWith('/login') || pathname.startsWith('/register')) return;
+  // 整页跳转：顺带清掉内存里的应用态，避免用旧状态继续发请求
+  window.location.assign(`/login?from=${encodeURIComponent(pathname + search)}`);
 }
 
 interface ReqOpts {
@@ -120,14 +139,10 @@ async function request<T>(
     }
     if (!opts.silent) {
       toastError(`${detail || STATUS_TEXT[res.status] || '请求失败'}（${res.status}）`);
-      if (res.status === 401) {
-        // 鉴权失效：清掉本地 token，由路由守卫决定是否跳登录
-        try {
-          localStorage.removeItem('ia_token');
-        } catch {
-          /* 忽略隐私模式下的 localStorage 异常 */
-        }
-      }
+    }
+    if (res.status === 401) {
+      // 鉴权失效：清本地凭据并跳登录页（带来源地址，登录后回到原页面）
+      handleUnauthorized();
     }
     throw new ApiError(res.status, detail || STATUS_TEXT[res.status] || res.statusText);
   }
@@ -173,7 +188,7 @@ export async function stream(
   const reader = res.body!.getReader();
   const decoder = new TextDecoder();
   try {
-    for (;;) {
+    for (; ;) {
       const { done, value } = await reader.read();
       if (done) break;
       onChunk(decoder.decode(value, { stream: true }));
@@ -193,6 +208,23 @@ export async function fetchReviewQueue(): Promise<QueueItem[]> {
 export async function fetchReviewDetail(id: string): Promise<ReviewDetail> {
   if (USE_MOCK) return delay(getReviewDetail(id));
   return get<ReviewDetail>(`/review-queue/${id}`);
+}
+
+/** 复核决策动作：采纳 / 驳回（对齐 P6 decide 接口的 decision 取值） */
+export type ReviewAction = 'approve' | 'reject';
+
+/**
+ * 提交复核决策（对齐 P6 §POST /api/review-queue/{id}/decide）。
+ * 前端采用「乐观更新」：点击即从队列移除并跳下一张，本请求在后台静默提交；
+ * 后端 decide 接口未就绪时返回 404，用 silent 关错误提示、catch 吞掉，
+ * 不影响复核员本地作业节奏。接口上线后同一份调用自动生效，无需再改前端。
+ */
+export async function submitReviewDecision(
+  id: string,
+  body: { decision: ReviewAction; reason?: string; edits?: Record<string, string> },
+  opts?: ReqOpts,
+): Promise<void> {
+  return post<void>(`/review-queue/${id}/decide`, body, opts);
 }
 
 /* ---------------- 仪表盘 /dashboard ---------------- */

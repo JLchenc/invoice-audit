@@ -6,6 +6,7 @@ import 'antd/dist/reset.css';
 import './styles/global.css';
 import ThemeModeProvider from '@/components/ThemeModeProvider';
 import MessageBinder from '@/components/MessageBinder';
+import AuthProvider from '@/components/AuthProvider';
 import App from './App';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
@@ -14,7 +15,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       <AntdApp>
         <MessageBinder />
         <BrowserRouter>
-          <App />
+          <AuthProvider>
+            <App />
+          </AuthProvider>
         </BrowserRouter>
       </AntdApp>
     </ThemeModeProvider>

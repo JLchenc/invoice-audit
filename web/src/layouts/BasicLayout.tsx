@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Avatar, Badge, Breadcrumb, Button, Layout, Menu, Space, Tooltip, Typography } from 'antd';
+import { Badge, Breadcrumb, Button, Layout, Menu, Space, Tooltip, Typography } from 'antd';
 import {
   AuditOutlined,
   BarChartOutlined,
@@ -25,6 +25,7 @@ import CommandPalette, { type CommandItem } from '@/components/CommandPalette';
 import ShortcutHelp from '@/components/ShortcutHelp';
 import { KbdHint } from '@/components/KbdHint';
 import { useThemeMode } from '@/components/ThemeModeProvider';
+import UserMenu from '@/components/UserMenu';
 import { fetchReviewQueue } from '@/api';
 
 const { Sider, Header, Content } = Layout;
@@ -287,16 +288,20 @@ export default function BasicLayout() {
           />
 
           <Space size={10}>
+            {/* 内容收成单个 inline-flex 子节点：antd Button 会给每个子元素单独包一层块级 span，
+                多个子节点会被竖着叠起来（键帽换行溢出的根因） */}
             <Button
               size="small"
-              icon={<SearchOutlined />}
               onClick={() => setPaletteOpen(true)}
-              style={{ minWidth: 148, justifyContent: 'flex-start' }}
+              style={{ paddingInline: 10 }}
             >
-              <span style={{ color: 'var(--ia-text-3)', fontSize: 12 }}>搜索 / 命令</span>
-              <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 2 }}>
-                <KbdHint>⌘</KbdHint>
-                <KbdHint>K</KbdHint>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap', lineHeight: 1 }}>
+                <SearchOutlined style={{ color: 'var(--ia-text-3)' }} />
+                <span style={{ color: 'var(--ia-text-3)', fontSize: 12, lineHeight: 1 }}>搜索 / 命令</span>
+                <span style={{ display: 'inline-flex', gap: 2, marginLeft: 8, lineHeight: 1 }}>
+                  <KbdHint>⌘</KbdHint>
+                  <KbdHint>K</KbdHint>
+                </span>
               </span>
             </Button>
             <Tooltip title={mode === 'dark' ? '切换到亮色' : '切换到深色'}>
@@ -313,9 +318,8 @@ export default function BasicLayout() {
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
               <Mono>{NAV_ENDPOINTS[location.pathname] ?? '/api/review-queue'}</Mono>
             </Typography.Text>
-            <Avatar size={28} style={{ background: 'var(--ia-primary)', fontSize: 12 }}>
-              AP
-            </Avatar>
+            {/* 用户菜单：真实登录身份 + 退出登录（UI-AUTH-v1.md §3.4），取代原硬编码 AP 头像 */}
+            <UserMenu />
           </Space>
         </Header>
 
