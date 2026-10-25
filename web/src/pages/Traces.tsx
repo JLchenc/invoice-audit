@@ -119,8 +119,8 @@ export default function Traces() {
           size="small"
           title={<span>运行记录</span>}
           extra={<span style={{ fontSize: 11, color: 'var(--ia-text-3)' }}>{filtered.length} 条</span>}
-          style={{ width: 250, flex: '0 0 250px' }}
-          styles={{ body: { padding: 8, display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0, overflow: 'auto' } }}
+          style={{ width: 250, flex: '0 0 250px', minHeight: 0, display: 'flex', flexDirection: 'column' }}
+          styles={{ body: { padding: 8, display: 'flex', flexDirection: 'column', gap: 8, flex: 1, minHeight: 0, overflow: 'auto' } }}
         >
           <Input.Search
             size="small"
@@ -204,8 +204,8 @@ export default function Traces() {
               </Button>
             </Space>
           }
-          style={{ flex: 1, minWidth: 0 }}
-          styles={{ body: { padding: 14, overflow: 'auto' } }}
+          style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}
+          styles={{ body: { padding: 14, overflow: 'auto', flex: 1, minHeight: 0 } }}
         >
           {!current ? (
             <Empty description="选择左侧记录查看链路详情" />

@@ -22,7 +22,7 @@ import { PriorityTag } from '@/components/tags';
 import VirtualList, { type VirtualRow } from '@/components/VirtualList';
 import useHotkeys from '@/hooks/useHotkeys';
 import useViewportWidth from '@/hooks/useViewportWidth';
-import { fetchReviewDetail, fetchReviewQueue } from '@/api';
+import { fetchReviewDetail, fetchReviewQueue, submitReviewDecision, type ReviewAction } from '@/api';
 import type { ExtractedField, MatchRow, Priority, QueueItem, ReviewDetail } from '@/types';
 import { formatAmount, isLowConfidence } from '@/utils/format';
 import { invoiceUrl } from '@/utils/invoice';
@@ -70,7 +70,6 @@ export default function Review() {
   const [edited, setEdited] = useState<Record<string, string>>({});
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
-  const [submitting, setSubmitting] = useState(false);
   const [zoomOpen, setZoomOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editValue, setEditValue] = useState('');
@@ -89,7 +88,10 @@ export default function Review() {
   }, []);
 
   useEffect(() => {
-    if (!selectedId) return;
+    if (!selectedId) {
+      setDetail(null);
+      return;
+    }
     let alive = true;
     setLoading(true);
     setEdited({});
@@ -129,29 +131,56 @@ export default function Review() {
     setSelectedId(list[next].id);
   }, []);
 
+  /**
+   * 提交复核决策 + 乐观联动（修复"采纳了数据不更新"）。
+   * 旧实现只弹 toast 并跳下一张，既没调后端、也没从队列移除当前项，
+   * 导致左侧计数与列表纹丝不动。现在：
+   *   1) 立刻从 queue 移除当前项 →「第 N / 总数」与列表即时联动；
+   *   2) 选中下一张（没有则上一张；队列清空则置空详情）；
+   *   3) 后台静默提交后端 decision 接口（未就绪时 404 被 silent + catch 吞掉，
+   *      接口上线后同一份调用自动持久化，无需再改前端）。
+   */
+  const decide = useCallback(
+    async (action: ReviewAction, extra: { reason?: string } = {}) => {
+      if (!detail) return;
+      const id = detail.item.id;
+      const invoiceNo = detail.item.invoiceNo;
+      const list = orderedRef.current;
+      const i = list.findIndex((q) => q.id === id);
+      const nextId = list[i + 1]?.id ?? list[i - 1]?.id ?? '';
+
+      setQueue((prev) => prev.filter((q) => q.id !== id));
+      setSelectedId(nextId);
+
+      if (action === 'approve') message.success(`已采纳 ${invoiceNo}，进入付款排程`);
+      else message.warning(`已驳回 ${invoiceNo}，已通知采购与供应商`);
+
+      void submitReviewDecision(
+        id,
+        { decision: action, reason: extra.reason, edits: Object.keys(edited).length ? edited : undefined },
+        { silent: true },
+      ).catch(() => {});
+    },
+    [detail, edited],
+  );
+
   const adopt = useCallback(() => {
-    if (!detail) return;
-    message.success(`已采纳 ${detail.item.invoiceNo}，进入付款排程`);
-    goTo(currentIndex + 1);
-  }, [detail, currentIndex, goTo]);
+    if (detail) void decide('approve');
+  }, [detail, decide]);
 
   const openReject = useCallback(() => {
     setRejectReason('');
     setRejectOpen(true);
   }, []);
 
-  const submitReject = async () => {
+  const submitReject = () => {
     const reason = rejectReason.trim();
     if (!reason) {
       message.error('驳回必须填写原因');
       return;
     }
-    setSubmitting(true);
-    await new Promise((r) => setTimeout(r, 240));
-    setSubmitting(false);
     setRejectOpen(false);
-    message.warning(`已驳回 ${detail?.item.invoiceNo}，已通知采购与供应商`);
-    goTo(currentIndex + 1);
+    void decide('reject', { reason });
   };
 
   const openEdit = useCallback(() => {
@@ -262,8 +291,9 @@ export default function Review() {
   );
 
   // 面板只有 ~340px，4 列放不下：来源收进「抽取値」下方小字（可审计不牺牲，且不挤压）
+  // 列宽按真实数据校准：标签列 96（「金额（不含税）」单行）、置信度 88（含 0.00 数字）
   const fieldColumns: ColumnsType<ExtractedField> = [
-    { title: '字段', dataIndex: 'label', key: 'label', width: 84, ellipsis: true },
+    { title: '字段', dataIndex: 'label', key: 'label', width: 96, ellipsis: true },
     {
       title: '抽取値 / 来源',
       dataIndex: 'value',
@@ -299,7 +329,7 @@ export default function Review() {
       title: '置信度',
       dataIndex: 'confidence',
       key: 'confidence',
-      width: 78,
+      width: 88,
       align: 'right',
       render: (v: number) => <ConfidenceBar value={v} />,
     },
@@ -419,8 +449,8 @@ export default function Review() {
               第 <Mono>{currentIndex + 1}</Mono> / <Mono>{queue.length}</Mono> 张
             </span>
           }
-          style={{ flex: '0 0 clamp(176px, 17vw, 240px)', minWidth: 0, overflow: 'hidden' }}
-          styles={{ body: { padding: '8px 0 4px', display: 'flex', flexDirection: 'column', minHeight: 0, minWidth: 0 } }}
+          style={{ flex: '0 0 clamp(176px, 17vw, 240px)', minWidth: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
+          styles={{ body: { padding: '8px 0 4px', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, minWidth: 0 } }}
         >
           {queue.length === 0 ? (
             <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="队列已清空" />
@@ -465,8 +495,8 @@ export default function Review() {
               </Button>
             </Space>
           }
-          style={{ flex: '1 1 0', minWidth: 0, overflow: 'hidden' }}
-          styles={{ body: { padding: 12, display: 'flex', flexDirection: 'column', minHeight: 0, minWidth: 0 } }}
+          style={{ flex: '1 1 0', minWidth: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
+          styles={{ body: { padding: 12, display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, minWidth: 0 } }}
         >
           {detail?.scannedNoTextLayer && (
             <Alert
@@ -497,13 +527,14 @@ export default function Review() {
           className="ia-card"
           size="small"
           loading={loading}
-          style={{ flex: '0 0 clamp(300px, 26vw, 380px)', minWidth: 0, overflow: 'hidden' }}
+          style={{ flex: '0 0 clamp(300px, 26vw, 380px)', minWidth: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
           styles={{
             body: {
               padding: 12,
               display: 'flex',
               flexDirection: 'column',
               gap: 10,
+              flex: 1,
               minHeight: 0,
               minWidth: 0,
               // 面板内容（对照表 + AI 建议）可能高于可视区，整体可滚动，避免底部被裁切
@@ -534,6 +565,7 @@ export default function Review() {
                     dataSource={fields}
                     pagination={false}
                     scroll={{ y: 240 }}
+                    tableLayout="fixed"
                     rowClassName={(row) =>
                       `${isLowConfidence(row.confidence) ? 'ia-row-low-conf ' : ''}${
                         row.key === activeField ? 'ia-row-current' : ''
@@ -582,7 +614,9 @@ export default function Review() {
       </div>
 
       {/* ---------------- 决策条：常驻置底（§5.5） ---------------- */}
-      <Card className="ia-card" size="small" styles={{ body: { padding: '8px 12px' } }}>
+      {/* flexShrink:0 —— 真实数据下右栏表格行数增多会把页面 min-content 撑高，
+          flex 默认 shrink 会把这条 48px 的决策栏压到 15px（实测踩过） */}
+      <Card className="ia-card" size="small" style={{ flexShrink: 0 }} styles={{ body: { padding: '8px 12px' } }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <Button type="primary" icon={<CheckCircleOutlined />} onClick={adopt} disabled={!detail}>
             A 采纳
@@ -663,7 +697,6 @@ export default function Review() {
         open={rejectOpen}
         onOk={submitReject}
         onCancel={() => setRejectOpen(false)}
-        confirmLoading={submitting}
         okText="确认驳回"
         okButtonProps={{ danger: true }}
         cancelText="取消"
