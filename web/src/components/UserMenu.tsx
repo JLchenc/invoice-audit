@@ -51,7 +51,7 @@ export default function UserMenu() {
       key: 'head',
       label: (
         <div className="ia-user-menu-head">
-          <Avatar size={32} style={{ background: 'var(--ia-primary)', fontSize: 13 }}>
+          <Avatar size={32} style={{ background: 'var(--ia-primary)', color: 'var(--ia-on-primary)', fontSize: 13 }}>
             {user.username.slice(0, 1).toUpperCase()}
           </Avatar>
           <span>
@@ -92,11 +92,14 @@ export default function UserMenu() {
   return (
     <Dropdown
       menu={{ items, onClick: ({ key }) => key === 'logout' && confirmLogout() }}
+      /* 弹层宽度：rc-trigger 会把弹层 minWidth 设成 trigger（Header 那个小按钮）的宽度，
+         不接管的话长标签被挤换行；样式见 global.css .ia-user-menu */
+      classNames={{ root: 'ia-user-menu' }}
       trigger={['click']}
       placement="bottomRight"
     >
       <Button type="text" size="small" className="ia-user-trigger">
-        <Avatar size={22} style={{ background: 'var(--ia-primary)', fontSize: 11 }}>
+        <Avatar size={22} style={{ background: 'var(--ia-primary)', color: 'var(--ia-on-primary)', fontSize: 11 }}>
           {user.username.slice(0, 1).toUpperCase()}
         </Avatar>
         <span className="ia-user-trigger-name">{user.username}</span>

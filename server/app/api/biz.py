@@ -29,9 +29,10 @@ from pathlib import Path, PurePosixPath
 
 from sqlalchemy import case
 from app.api.schemas import (AiSuggestionOut, ExtractedFieldOut, MatchRowOut,
-                             QueueItemOut, ReviewDetailOut)
+                             QueueItemOut, ReviewDetailOut,ScannedDocOut)
 from app.models.app_models import (Contract, GoodsReceipt, InvoiceDocument,
                                    InvoiceField, MatchResult, PurchaseOrder, ReviewQueue)
+from app.models.ctrl_models import TraceRecord      # ctrl.trace_records：列表行上的 trace 短号
 
 from app.core.config import get_settings
 from app.core.security import create_token
@@ -264,3 +265,79 @@ async def login(body: dict) -> dict:
         raise HTTPException(401, "用户名或密码错误")
     token = create_token(body["username"], settings.token_secret, settings.token_expire_hours)
     return {"token": token, "username": body["username"]}
+
+
+# -----------GET /api/documents  扫描件池列表------------
+
+@router.get('/documents', response_model=list[ScannedDocOut])
+async def list_documents(session: AsyncSession = Depends(get_session)):
+    """
+    扫描件池列表：以 app.invoice_documents 为主行，其余展示列分别来自
+    抽取字段（供应商/金额）、match_results（关联单号）、review_queue（复核详情 id）、
+    ctrl.trace_records（最新一次运行的 trace 短号）。
+
+    四类信息各发一条批量查询按 document_id 归组，不按文档循环查询
+    （51 张 × 3 条 SQL 会把首屏拖成一百多条查询）。
+    """
+    docs = (await session.execute(
+        select(InvoiceDocument).order_by(InvoiceDocument.created_at.desc(), InvoiceDocument.id.desc())
+    )).scalars().all()
+    if not docs:
+        return []
+    doc_ids = [d.id for d in docs]
+
+    # 抽取字段：一张票一份 {field_name: value}
+    fields_by_doc: dict[int, dict[str, str]] = {}
+    for f in (await session.execute(
+            select(InvoiceField).where(InvoiceField.document_id.in_(doc_ids)))).scalars():
+        fields_by_doc.setdefault(f.document_id, {})[f.field_name] = f.field_value
+
+    # 关联单号取自匹配结果本身：已匹配(pass)的票不进复核队列，
+    # 若只从 review_queue 侧连表，它们的 PO 号会被整批丢掉
+    po_by_doc: dict[int, str] = {}
+    for doc_id, matched_po in (await session.execute(
+            select(MatchResult.document_id, MatchResult.matched_po)
+            .where(MatchResult.document_id.in_(doc_ids))
+            .order_by(MatchResult.id.desc()))).all():
+        po_by_doc.setdefault(doc_id, matched_po)      # 倒序后的第一条 = 最新一次匹配
+
+    # 详情 id：只有进了复核队列的票才有可打开的三栏对照
+    rq_by_doc: dict[int, str] = {}
+    for rq_id, doc_id in (await session.execute(
+            select(ReviewQueue.id, ReviewQueue.document_id)
+            .where(ReviewQueue.document_id.in_(doc_ids)))).all():
+        rq_by_doc[doc_id] = str(rq_id)
+
+    # trace：按 id 倒序取每张票的第一条，即最新一次运行
+    trace_by_doc: dict[int, str] = {}
+    for doc_id, trace_id in (await session.execute(
+            select(TraceRecord.document_id, TraceRecord.trace_id)
+            .where(TraceRecord.document_id.in_(doc_ids))
+            .order_by(TraceRecord.id.desc()))).all():
+        trace_by_doc.setdefault(doc_id, str(trace_id))
+
+    out = []
+    for d in docs:
+        fm = fields_by_doc.get(d.id, {})
+        trace = trace_by_doc.get(d.id)
+        try:
+            amount = float(fm.get("total_amount") or 0)
+        except ValueError:                                # 抽取值是 Text，脏数据不能让整个列表 500
+            amount = 0
+        out.append(ScannedDocOut(
+            id=str(d.id),
+            fileName=d.file_name,
+            pages=d.pages,
+            source=d.source,
+            status=d.status,
+            retryCount=d.retry_count or 0,
+            pdfFile=pdf_file_name(d.file_path),
+            linkedDocNo=po_by_doc.get(d.id) or f"DOC-{d.id:06d}",   # 没匹配到采购单时用文档号占位，不留空白
+            vendor=fm.get("seller_name"),
+            amount=amount,
+            uploadedAt=fmt_dt(d.created_at),
+            traceId=f"tr-{trace[:6]}" if trace else None,
+            detailId=rq_by_doc.get(d.id),
+        ))
+    return out
+

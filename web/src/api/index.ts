@@ -115,7 +115,13 @@ async function request<T>(
   opts: ReqOpts = {},
 ): Promise<T> {
   const headers = new Headers(init.headers);
-  if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+  /* FormData / Blob / URLSearchParams 不能手动指定 Content-Type：
+     boundary 由浏览器生成，写死 application/json 会让 FastAPI 解析不到文件（422） */
+  const isFormBody =
+    init.body instanceof FormData ||
+    init.body instanceof Blob ||
+    init.body instanceof URLSearchParams;
+  if (!isFormBody && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
   const token = getToken();
   if (token) headers.set('Authorization', `Bearer ${token}`);
 
@@ -132,8 +138,13 @@ async function request<T>(
     // 后端按 FastAPI 习惯会把原因放在 JSON 的 detail 里，优先用它
     let detail = '';
     try {
-      const body = (await res.json()) as { detail?: string; message?: string };
-      detail = body.detail ?? body.message ?? '';
+      const body = (await res.json()) as { detail?: unknown; message?: string };
+      const raw = body.detail ?? body.message ?? '';
+      /* 422 的 detail 是错误数组（[{loc, msg, type}]），直接拼进模板会得到 [object Object]；
+         数组时取每条的 msg 拼成人话 */
+      detail = Array.isArray(raw)
+        ? raw.map((e) => (e && typeof e === 'object' && 'msg' in e ? String((e as { msg: unknown }).msg) : String(e))).join('；')
+        : String(raw);
     } catch {
       /* 响应体非 JSON（如 dev 代理连不上后端时的 500），走状态码映射 */
     }
@@ -245,6 +256,17 @@ export async function fetchDashboard(days: number): Promise<DashboardData> {
 export async function fetchDocuments(): Promise<ScannedDoc[]> {
   if (USE_MOCK) return delay(scannedDocs);
   return get<ScannedDoc[]>('/documents');
+}
+
+/**
+ * 上传一张票据：后端只做「存文件 + 建 pending 行 + 入队」，毫秒级返回；
+ * 真正的链路在 worker 进程里跑，状态变化由列表轮询体现（见 P5 设计）。
+ * 返回值只声明用到的字段——上传接口返回的是原始 dict（file_name 是下划线），别照着写类型。
+ */
+export async function uploadDocument(file: File): Promise<{ id: number; status: string }> {
+  const form = new FormData();
+  form.append('file', file);
+  return postForm<{ id: number; status: string }>('/documents', form);
 }
 
 /* ---------------- 规则配置 /rules ---------------- */

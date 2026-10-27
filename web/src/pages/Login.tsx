@@ -83,7 +83,13 @@ export default function Login() {
         layout="vertical"
         size="large"
         requiredMark={false}
-        initialValues={{ remember: true, username: presetUsername ?? '' }}
+        initialValues={{
+          remember: true,
+          /* 从 401 拦截器带过来的账号走 initialValues：Form.Item 是受控字段，
+             写在 Input 上的 defaultValue 只会显示在 DOM 里，进不了表单状态——
+             点登录会被 required 拦成「请输入密码」 */
+          username: presetUsername ?? '',
+        }}
         onFinish={onFinish}
         disabled={submitting}
       >

@@ -12,11 +12,17 @@
   --ia-split: #edeff2;
   --ia-text: #1f2329;
   --ia-text-2: #5a6069;
-  --ia-text-3: #8a9099;
+  /* 三级文本原来定在 #8A9099：白底实测只有 3.22:1，而它被用在面包屑分隔符、
+     表单说明、空态描述、接口路径这些「要读」的字上 —— WCAG 对正文没有豁免。
+     压到 #646C76 后白底 5.31:1、最深的着色面板（AI 浅青）上 4.68:1，
+     仍浅于二级文本的 6.34:1，层级不倒挂。同 theme.ts COLOR.textWeak。 */
+  --ia-text-3: #646c76;
   --ia-primary: #2a5ce0;
   --ia-primary-hover: #4c7df0;
   --ia-primary-active: #1e45b8;
   --ia-primary-soft: #eef3fe;
+  /* 压在 --ia-primary 实色上的字色（头像首字母等）。亮色 #2A5CE0 配白 5.65:1 */
+  --ia-on-primary: #ffffff;
   --ia-ai: #0e7c9b;
   --ia-ai-bg: #e4f2f6;
   --ia-ai-deep: #0a5c74;
@@ -27,7 +33,7 @@
   /* 实心徽标 / 优先级 chip：底色要够饱和，文字色必须跟着换，否则白字压浅红看不清 */
   --ia-diff-solid: #d93a3a;
   --ia-diff-solid-fg: #ffffff;
-  --ia-warn-solid: #c77700;
+  --ia-warn-solid: #a66200;
   --ia-warn-solid-fg: #ffffff;
   --ia-muted-solid: #e6e4dd;
   --ia-muted-solid-fg: #4a4945;
@@ -48,11 +54,14 @@
   --ia-split: #2c333d;
   --ia-text: #eef1f6;
   --ia-text-2: #b6bdc9;
-  --ia-text-3: #8b93a1;
+  --ia-text-3: #98a1af;
   --ia-primary: #7ba1ff;
   --ia-primary-hover: #96b4ff;
   --ia-primary-active: #a9c2ff;
   --ia-primary-soft: rgba(123, 161, 255, 0.22);
+  /* 深色下 --ia-primary 是亮蓝 #7BA1FF，白字压上去只有 2.5:1（头像首字母实测）。
+     和 --ia-diff-solid-fg / --ia-warn-solid-fg 同一约定：浅实心块配深墨。 */
+  --ia-on-primary: #10161f;
   --ia-ai: #56bcd9;
   --ia-ai-bg: rgba(86, 188, 217, 0.16);
   --ia-ai-deep: #a8dceb;
@@ -96,6 +105,16 @@ body {
   font-family: 'JetBrains Mono', 'SF Mono', Consolas, Menlo, monospace;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.2px;
+}
+
+/* 窄栏里的单行省略。
+   flex 子项的 min-width 默认是 auto（= min-content），而数字串没有断行点，
+   不显式给 0 就永远撑破父容器 —— 复核队列里 20 位发票号把优先级标签挤出卡片就是这个原因。 */
+.ia-ellipsis {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ============ 页面容器 ============ */
@@ -189,6 +208,12 @@ body {
   border-left-color: var(--ia-primary);
 }
 
+/* 队列项里的标签（P0/P1/P2、归因 chip）是「必须看全」的短元素，不参与收缩；
+   省略只发生在 .ia-ellipsis 的文本上，避免标签被挤到卡片外面 */
+.ia-item .ia-tag {
+  flex: none;
+}
+
 .ia-row-clickable {
   cursor: pointer;
 }
@@ -241,7 +266,10 @@ body {
 
 /* 选中态：左侧 3px 主色竖条 + 主色浅底 + 主色深字（§3.3） */
 .ia-menu.ant-menu-light .ant-menu-item-selected {
-  font-weight: 500;
+  /* 600 不是手滑：Windows 上没有苹方，字体栈落到微软雅黑，而雅黑只有 400/700 两档，
+     500 会被静默渲染成 Regular —— 选中项和邻居的字重实际一模一样，
+     加粗这个可扫描性线索只剩颜色。600 才真的取到 Bold。 */
+  font-weight: 600;
 }
 
 .ia-menu.ant-menu-inline .ant-menu-item {
@@ -1080,7 +1108,9 @@ kbd,
 /* 渐变主按钮：复用 theme.ts 的 gradientPrimary */
 .ia-auth-submit.ant-btn-primary {
   background: linear-gradient(135deg, #2a5ce0 0%, #4c7df0 100%);
-  border: none;
+  /* 同 .ia-user-trigger：border: none 只压得住静止态，antd 的 hover 规则会把 1px 边框加回来
+     （颜色是 transparent，看不见但占位），文字会跟着半像素位移。基础态直接留 1px 透明边框。 */
+  border: 1px solid transparent;
   box-shadow: 0 2px 8px rgba(42, 92, 224, 0.22);
   transition: transform 0.12s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.12s cubic-bezier(0.4, 0, 0.2, 1), filter 0.12s;
 }
@@ -1094,6 +1124,46 @@ kbd,
 :root[data-theme='dark'] .ia-auth-submit.ant-btn-primary {
   background: linear-gradient(135deg, #4c7df0 0%, #7ba1ff 100%);
   box-shadow: 0 2px 10px rgba(123, 161, 255, 0.22);
+}
+
+/* ---------- 深色下的危险色（§2.3） ----------
+   深色算法会把 colorError #D93A3A 再往底色混一档得到 #BB3434，
+   压在容器 #1E232B 上实测只有 2.75:1 —— 工作台最重要的「S 驳回」按钮几乎看不清，
+   用户菜单里的「退出登录」、表格行的「停用」、评测中心的「强制重跑」全是同一档。
+   这里按既有约定重做：文字 / 描边提亮到 --ia-diff-solid，实心按钮沿用「浅实心 + 深墨」（同 P0/P1 chip）。
+   选择器权重 0-4-0 才压得住 antd 的 :where(.css-hash).ant-btn-*（同 .ia-user-trigger 的教训）。 */
+:root[data-theme='dark'] .ant-btn-dangerous:not(.ant-btn-variant-solid) {
+  color: var(--ia-diff-solid);
+}
+
+:root[data-theme='dark'] .ant-btn-dangerous:not(.ant-btn-variant-solid):hover:not(:disabled) {
+  color: var(--ia-diff-fg);
+}
+
+:root[data-theme='dark'] .ant-btn-dangerous.ant-btn-variant-outlined {
+  border-color: rgba(255, 138, 138, 0.55);
+}
+
+:root[data-theme='dark'] .ant-btn-dangerous.ant-btn-variant-outlined:hover:not(:disabled) {
+  border-color: var(--ia-diff-fg);
+}
+
+:root[data-theme='dark'] .ant-btn-dangerous.ant-btn-variant-solid {
+  color: var(--ia-diff-solid-fg);
+  background: var(--ia-diff-solid);
+  border-color: transparent;
+}
+
+:root[data-theme='dark'] .ant-btn-dangerous.ant-btn-variant-solid:hover:not(:disabled) {
+  background: var(--ia-diff-fg);
+}
+
+:root[data-theme='dark'] .ant-dropdown-menu-item-danger .ant-dropdown-menu-title-content {
+  color: var(--ia-diff-solid);
+}
+
+:root[data-theme='dark'] .ant-dropdown-menu-item-danger:hover .ant-dropdown-menu-title-content {
+  color: var(--ia-diff-fg);
 }
 
 /* ---------- 密码强度条 ---------- */
@@ -1148,9 +1218,16 @@ kbd,
   align-items: center;
   gap: 6px;
   height: 28px;
-  padding: 0 6px 0 4px;
+  /* padding 左右各留 1px 给下面那条透明边框 */
+  padding: 0 5px 0 3px;
   border-radius: 6px;
-  border: none;
+  /* 不要写 border: none：antd 的 .ant-btn:not(:disabled):hover 会把
+     border: var(--ant-btn-border-width)(=1px) ... 重新声明一遍，选择器权重 0-4-0，
+     我们这条 0-1-0 的 none 只压得住静止态 —— 鼠标一进来按钮就宽 2px，
+     而它在 Header 里是右对齐的，于是整块内容左移 2px，看起来就是抖动。
+     透明边框在 text / solid 变体下各状态颜色都是 transparent（实测），
+     所以基础态直接带上 1px，四态几何完全一致。 */
+  border: 1px solid transparent;
   background: transparent;
   cursor: pointer;
   color: var(--ia-text);
@@ -1159,9 +1236,9 @@ kbd,
   transition: background 0.12s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.ia-user-trigger:hover {
-  background: var(--ia-header);
-}
+/* 悬停底色交给 antd 的 variant-text token（深色 rgba(255,255,255,.08)）；
+   这里不再声明 background，0-1-0 的 .ia-user-trigger:hover 压不过 0-4-0 的 antd hover，
+   写了也是死规则。 */
 
 .ia-user-trigger-name {
   max-width: 96px;
@@ -1182,4 +1259,30 @@ kbd,
   font-weight: 600;
   color: var(--ia-text);
   line-height: 18px;
+}
+
+/* 用户菜单弹层：rc-trigger 的弹层最小宽度跟着 trigger（Header 上那个小按钮）走，
+   内容又被压回这么窄，「个人中心 建设中」这种长标签直接换行、菜单项高度一高一低。
+   这里给弹层一个自己的可读宽度，并禁止菜单项换行。 */
+.ia-user-menu .ant-dropdown-menu {
+  min-width: 216px;
+  padding-block: 4px;
+}
+
+.ia-user-menu .ant-dropdown-menu-item,
+.ia-user-menu .ant-dropdown-menu-title-content {
+  white-space: nowrap;
+}
+
+/* 头部一行：头像 + 姓名/角色，角色标签和姓名同宽起排，不换行也不压字 */
+.ia-user-menu-head {
+  min-width: 0;
+}
+
+.ia-user-menu-head > span:last-child {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
 }

@@ -60,7 +60,9 @@ export default function AiSuggestion({
           <ReasonChip code={suggestion.code} muted={degraded} labelOnly />
         </Space>
         <Tooltip title="模型对该归因的自评置信度，仅供参考">
-          <span style={{ fontSize: 11, color: 'var(--ia-text-3)' }}>
+          {/* text-3 在 AI 面板底色 #2A303A 上实测 4.29:1（11px），差一点点就是看不清；
+              提到 text-2 后 7.0:1，且这行本来就是次要信息，不需要更弱 */}
+          <span style={{ fontSize: 11, color: 'var(--ia-text-2)' }}>
             置信度 <Mono>{(suggestion.confidence * 100).toFixed(0)}%</Mono>
           </span>
         </Tooltip>
@@ -82,7 +84,9 @@ export default function AiSuggestion({
 
       <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px dashed var(--ia-border)' }}>
         {degraded ? (
-          <Typography.Text type="secondary" style={{ fontSize: 11 }}>
+          /* type="secondary" 走的是 antd 的 45% 透明描述色，在 AI 面板底色上只有 4.29:1；
+             降级态的表头已经用 --ia-muted-fg，这句免责说明跟着同一 token，深浅色都 ≥5:1 */
+          <Typography.Text style={{ fontSize: 11, color: 'var(--ia-muted-fg)' }}>
             本建议无文档依据（知识库未命中），仅供参考，不作为判定依据
           </Typography.Text>
         ) : (
@@ -103,7 +107,7 @@ export default function AiSuggestion({
             填入驳回原因
           </Button>
         )}
-        <span style={{ fontSize: 11, color: 'var(--ia-text-3)' }}>建议仅作参考 · 最终决策由复核人做出</span>
+        <span style={{ fontSize: 11, color: 'var(--ia-text-2)' }}>建议仅作参考 · 最终决策由复核人做出</span>
       </div>
     </div>
   );

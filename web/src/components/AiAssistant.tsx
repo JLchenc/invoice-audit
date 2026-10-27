@@ -156,7 +156,7 @@ export default function AiAssistant({
       ai: {
         placement: 'start' as const,
         avatar: (
-          <Avatar size={28} style={{ background: 'linear-gradient(135deg,var(--ia-primary),var(--ia-ai))' }} icon={<RobotOutlined />} />
+          <Avatar size={28} style={{ background: 'linear-gradient(135deg,var(--ia-primary),var(--ia-ai))', color: 'var(--ia-on-primary)' }} icon={<RobotOutlined />} />
         ),
         styles: { content: { fontSize: 12 } },
       },
@@ -196,7 +196,7 @@ export default function AiAssistant({
       >
         <Space size={8}>
           <Badge dot color="var(--ia-ai)" offset={[-2, 6]}>
-            <Avatar size={26} style={{ background: 'linear-gradient(135deg,var(--ia-primary),var(--ia-ai))' }} icon={<RobotOutlined />} />
+            <Avatar size={26} style={{ background: 'linear-gradient(135deg,var(--ia-primary),var(--ia-ai))', color: 'var(--ia-on-primary)' }} icon={<RobotOutlined />} />
           </Badge>
           <div>
             <div style={{ fontSize: 13, fontWeight: 600 }} className="ia-gradient-text">

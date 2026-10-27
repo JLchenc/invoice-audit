@@ -34,7 +34,11 @@ export const COLOR = {
   sider: '#FFFFFF',
   textPrimary: '#1F2329',
   textSecondary: '#5A6069',
-  textWeak: '#8A9099',
+  /* 三级文本原来定在 #8A9099：白底实测只有 3.22:1，而它被用在面包屑分隔符、
+     表单说明、空态描述、接口路径这些「要读」的字上 —— WCAG 对正文没有豁免。
+     #646C76 在白底 5.31:1，在最深的着色面板（AI 浅青 #E4F2F6）上也有 4.68:1，
+     同时仍明显浅于二级文本 #5A6069 的 6.34:1，层级不倒挂。与 global.css --ia-text-3 同值。 */
+  textWeak: '#646C76',
   border: '#E3E6EB',
   split: '#EDEFF2',
 } as const;
@@ -59,7 +63,9 @@ export const DARK = {
   sider: '#1A1E25',
   textPrimary: '#EEF1F6',
   textSecondary: '#B6BDC9',
-  textWeak: '#8B93A1',
+  /* 同亮色那一档：#8B93A1 在容器底 5.13:1 够用，但压到 --ia-muted-bg #2A303A
+     （AI 面板 / 说明块底色）只剩 4.29:1，11px 小字发灰。提到 #98A1AF 后 5.3:1。 */
+  textWeak: '#98A1AF',
   border: '#39414D',
   split: '#2C333D',
 } as const;
@@ -266,6 +272,10 @@ export const theme: ThemeConfig = {
     colorText: COLOR.textPrimary,
     colorTextSecondary: COLOR.textSecondary,
     colorTextTertiary: COLOR.textWeak,
+    /* antd 的 .ant-empty-description / .ant-form-item-extra / 面包屑分隔符走的是
+       colorTextDescription（默认 45% 透明黑 = #8A9099，白底 3.22:1），不覆盖的话
+       改了 --ia-text-3 也还是灰一片 */
+    colorTextDescription: COLOR.textWeak,
     colorBorder: COLOR.border,
     colorBorderSecondary: COLOR.split,
     colorLink: COLOR.primary,
@@ -290,6 +300,7 @@ export const themeDark: ThemeConfig = {
     colorText: DARK.textPrimary,
     colorTextSecondary: DARK.textSecondary,
     colorTextTertiary: DARK.textWeak,
+    colorTextDescription: DARK.textWeak,
     colorBorder: DARK.border,
     colorBorderSecondary: DARK.split,
     colorLink: '#96B4FF',
@@ -313,7 +324,18 @@ export const themeDark: ThemeConfig = {
       // baseComponents 里写的是亮色分割线，深色必须覆盖，否则行线会在深底上格外刺眼
       borderColor: DARK.split,
       headerSplitColor: 'transparent',
+      /* 同类泄漏：baseComponents 的 headerColor 是亮色 #5A6069，
+         压在深色表头 #262C35 上实测只有 2.22:1（12px 字），表格在夜间模式基本看不清。
+         用 textSecondary 而不是 textWeak：#8B93A1 在该底色只有 4.54:1，刚好卡在 AA 线上。 */
+      headerColor: DARK.textSecondary,
     },
+    /* 进度条未填充段：亮色用 6% 黑，深底上等于看不见（进度轨直接消失） */
+    Progress: { ...baseComponents.Progress, remainingColor: 'rgba(255,255,255,.12)' },
+    /* 深色算法会把 colorPrimary(#7BA1FF) 往底色混一档得到实心 #6C8CDC，
+       白字压上去实测只有 3.27:1 —— 全站主按钮（检索 / 新增 / 发布 / 登录）在夜间模式集体不达标。
+       沿用深色实心块的既有约定（--ia-diff-solid / --ia-warn-solid 都是浅底 + 深字），
+       把主按钮的字色改成深墨：#6C8CDC 上 5.54:1，hover 更亮、active 更深都仍在 AA 以上。 */
+    Button: { ...baseComponents.Button, primaryColor: '#10161F' },
     Segmented: { ...baseComponents.Segmented, trackBg: DARK.bgHeader, itemSelectedBg: '#333A46' },
     Tabs: { ...baseComponents.Tabs, cardBg: DARK.bgHeader },
     Descriptions: { labelBg: DARK.bgHeader },

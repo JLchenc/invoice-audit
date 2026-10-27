@@ -42,7 +42,7 @@ export default function InvoiceDetailPanel({
   const fieldColumns: ColumnsType<ExtractedField> = [
     { title: '字段', dataIndex: 'label', key: 'label', width: 96, ellipsis: true },
     {
-      title: '抽取値',
+      title: '抽取值',
       dataIndex: 'value',
       key: 'value',
       render: (v: string) => <Mono strong>{v}</Mono>,

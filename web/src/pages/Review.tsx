@@ -24,7 +24,7 @@ import useHotkeys from '@/hooks/useHotkeys';
 import useViewportWidth from '@/hooks/useViewportWidth';
 import { fetchReviewDetail, fetchReviewQueue, submitReviewDecision, type ReviewAction } from '@/api';
 import type { ExtractedField, MatchRow, Priority, QueueItem, ReviewDetail } from '@/types';
-import { formatAmount, isLowConfidence } from '@/utils/format';
+import { formatAmount, isLowConfidence, middleEllipsis } from '@/utils/format';
 import { invoiceUrl } from '@/utils/invoice';
 
 /** 单张目标耗时：PRD 指标 ≤ 1.5 分钟，超时计时器变琥珀 */
@@ -248,8 +248,15 @@ export default function Review() {
               style={{ padding: '6px 8px', marginBottom: 4 }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
-                <Mono strong style={{ fontSize: 12 }}>
-                  {q.invoiceNo}
+                {/* 数电票 20 位号码：不省略会把右侧优先级标签整个挤出卡片（实测标签右沿超出内容盒 17px）。
+                    JS 中段省略保住首尾 + CSS 省略号兜底更窄的情况，完整值挂 title */}
+                <Mono
+                  strong
+                  title={q.invoiceNo}
+                  className="ia-ellipsis"
+                  style={{ fontSize: 12 }}
+                >
+                  {middleEllipsis(q.invoiceNo)}
                 </Mono>
                 <PriorityTag priority={q.priority} />
               </div>
@@ -290,22 +297,29 @@ export default function Review() {
     [detail, edited],
   );
 
-  // 面板只有 ~340px，4 列放不下：来源收进「抽取値」下方小字（可审计不牺牲，且不挤压）
-  // 列宽按真实数据校准：标签列 96（「金额（不含税）」单行）、置信度 88（含 0.00 数字）
+  // 面板只有 ~340px，4 列放不下：来源收进「抽取值」下方小字（可审计不牺牲，且不挤压）
+  // 列宽按真实数据校准：标签列 100（「金额（不含税）」单行不裁，96 时实测差 4px）、置信度 88（含 0.00 数字）
   const fieldColumns: ColumnsType<ExtractedField> = [
-    { title: '字段', dataIndex: 'label', key: 'label', width: 96, ellipsis: true },
+    { title: '字段', dataIndex: 'label', key: 'label', width: 100, ellipsis: true },
     {
-      title: '抽取値 / 来源',
+      // 表头套 nowrap：CJK 没有词边界，列稍窄就把「来源」拆成「来 / 源」两行（实测表头被撑到 55px 高）
+      title: <span style={{ whiteSpace: 'nowrap' }}>抽取值 / 来源</span>,
       dataIndex: 'value',
       key: 'value',
       render: (v: string, row) => (
         <div style={{ minWidth: 0 }}>
+          {/* 值可以折行、不能省略：这是「抽取对不对」的核对面板，
+              税号 18 位 / 公司名 12 字在 81px 内容宽里必然超（实测需要 126~146px），
+              ellipsis 掐掉尾部恰好丢掉数电票流水号与抬头校验位，等于让复核员猜。
+              折成两行只多 16px 行高，信息一个字不少。 */}
           <div
-            title={v}
-            style={{ fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+            title={v || '未抽取到值'}
+            style={{ fontSize: 12, fontWeight: 500, lineHeight: '16px', wordBreak: 'break-all' }}
             className="mono"
           >
-            {v}
+            {/* 空值必须留痕：「发票类型」这一行抽取失败（置信度 0.00）时整格空白，
+                看上去像渲染坏了，而不是"没抽到" —— 用破折号占位，颜色走三级文本 */}
+            {v || <span style={{ color: 'var(--ia-text-3)', fontWeight: 400 }}>—</span>}
           </div>
           <Tooltip title={`来源：${row.source ?? 'parser'}`}>
             <div
@@ -449,7 +463,7 @@ export default function Review() {
               第 <Mono>{currentIndex + 1}</Mono> / <Mono>{queue.length}</Mono> 张
             </span>
           }
-          style={{ flex: '0 0 clamp(176px, 17vw, 240px)', minWidth: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
+          style={{ flex: '0 0 clamp(196px, 18vw, 240px)', minWidth: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
           styles={{ body: { padding: '8px 0 4px', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, minWidth: 0 } }}
         >
           {queue.length === 0 ? (
@@ -527,7 +541,7 @@ export default function Review() {
           className="ia-card"
           size="small"
           loading={loading}
-          style={{ flex: '0 0 clamp(300px, 26vw, 380px)', minWidth: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
+          style={{ flex: '0 0 clamp(330px, 26vw, 380px)', minWidth: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
           styles={{
             body: {
               padding: 12,
@@ -746,7 +760,7 @@ export default function Review() {
         cancelText="取消"
       >
         <div style={{ fontSize: 12, color: 'var(--ia-text-2)', marginBottom: 8 }}>
-          {fields.find((f) => f.key === activeField)?.label} · 原抽取値{' '}
+          {fields.find((f) => f.key === activeField)?.label} · 原抽取值{' '}
           <Mono>{detail?.fields.find((f) => f.key === activeField)?.value}</Mono>
         </div>
         <Input

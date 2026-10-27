@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Alert,
@@ -8,11 +8,11 @@ import {
   Empty,
   Input,
   Modal,
-  Progress,
   Row,
   Segmented,
   Select,
   Space,
+  Spin,
   Table,
   Tooltip,
   Typography,
@@ -22,6 +22,8 @@ import { message } from '@/utils/toast';
 import type { ColumnsType } from 'antd/es/table';
 import type { UploadFile, UploadProps } from 'antd';
 import {
+  CheckCircleOutlined,
+  CloseCircleOutlined,
   CloudUploadOutlined,
   ExportOutlined,
   FileTextOutlined,
@@ -32,11 +34,10 @@ import {
 import Mono from '@/components/Mono';
 import InvoiceDetailPanel from '@/components/InvoiceDetailPanel';
 import { SemanticTag } from '@/components/tags';
-import { getReviewDetail } from '@/mock/review';
-import { SOURCE_LABEL, STATUS_LABEL, ocrTextSample, scannedDocs } from '@/mock/documents';
-import type { DocProcessStatus, DocSource, ScannedDoc } from '@/types';
+import { fetchDocuments, fetchReviewDetail, uploadDocument } from '@/api';
+import { SOURCE_LABEL, STATUS_LABEL } from '@/mock/documents';
+import type { DocProcessStatus, DocSource, ReviewDetail, ScannedDoc } from '@/types';
 import { formatMoney } from '@/utils/format';
-import { invoiceUrl } from '@/utils/invoice';
 
 const { Dragger } = Upload;
 
@@ -103,13 +104,42 @@ const STATUS_TAG: Record<DocProcessStatus, 'disabled' | 'info' | 'success' | 'wa
 
 export default function Documents() {
   const navigate = useNavigate();
-  const [list, setList] = useState<ScannedDoc[]>(scannedDocs);
+  const [list, setList] = useState<ScannedDoc[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [keyword, setKeyword] = useState('');
   const [status, setStatus] = useState<'全部' | DocProcessStatus>('全部');
   const [source, setSource] = useState<DocSource | undefined>(undefined);
   const [uploads, setUploads] = useState<UploadFile[]>([]);
   const [detailId, setDetailId] = useState<string | null>(null);
-  const seq = useRef(100);
+  const [detail, setDetail] = useState<ReviewDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+
+  /** silent=true 给轮询用：不重新铺 loading 骨架，列表不会每两秒闪一下 */
+  const reload = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
+    try {
+      setList(await fetchDocuments());
+      setLoadError(null);
+    } catch (e) {
+      // request() 已经弹过 toast（同文案按内容去重不会堆一摞），这里只留页面级的可重试提示
+      setLoadError(e instanceof Error ? e.message : '扫描件池加载失败');
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+
+  /* Worker 是异步的：池子里还有 pending/processing 就轮询状态，全部落地后自动停 */
+  const hasInflight = list.some((d) => d.status === 'pending' || d.status === 'processing');
+  useEffect(() => {
+    if (!hasInflight) return undefined;
+    const timer = window.setInterval(() => void reload(true), 2000);
+    return () => window.clearInterval(timer);
+  }, [hasInflight, reload]);
 
   /* 上传闸门：accept 只约束文件选择器（可选"所有文件"绕过），真正的拦截在 beforeUpload；
      与后端 P5 的 %PDF 魔数 + 20MB 校验同规则（前后端双重校验） */
@@ -126,70 +156,21 @@ export default function Documents() {
     return true;
   };
 
-  /* ---------- 上传：模拟进度 + 入池 + 走处理链路 ---------- */
-  const customRequest: UploadProps['customRequest'] = (options) => {
-    const { file, onProgress, onSuccess, onError } = options;
-    let percent = 0;
-    const timer = window.setInterval(() => {
-      percent = Math.min(96, percent + 8 + Math.random() * 14);
-      onProgress?.({ percent });
-      if (percent >= 96) {
-        window.clearInterval(timer);
-        onProgress?.({ percent: 100 });
-        onSuccess?.({}, new XMLHttpRequest());
-      }
-    }, 140);
-    void file;
-    void onError;
+  /* ---------- 上传：真实 POST /api/documents，入队后由上面的轮询接住状态 ---------- */
+  const customRequest: UploadProps['customRequest'] = async (options) => {
+    const { file, onSuccess, onError } = options;
+    try {
+      await uploadDocument(file as File);
+      onSuccess?.({}, new XMLHttpRequest());
+      message.success(`${(file as File).name} 已入队，等待 Worker 处理`);
+      void reload(true); // 新行立刻进池，此刻多半还是「待处理」
+    } catch (e) {
+      onError?.(e as Error); // 失败提示由 request() 统一弹，这里只把条目置成失败态
+    }
   };
 
   const handleUploadChange: UploadProps['onChange'] = ({ fileList }) => {
     setUploads(fileList.slice(-4));
-
-    fileList
-      .filter((f) => f.status === 'done' && f.percent === 100)
-      .forEach((f) => {
-        setList((prev) => {
-          if (prev.some((d) => d.fileName === f.name)) return prev;
-          seq.current += 1;
-          const id = `u${seq.current}`;
-          const doc: ScannedDoc = {
-            id,
-            fileName: f.name,
-            pages: 1,
-            source: 'upload',
-            status: 'pending',
-            retryCount: 0,
-            pdfFile: 'INV-2026-0001.pdf',
-            linkedDocNo: `REQ-20261024-${String(seq.current).padStart(4, '0')}`,
-            vendor: '待识别',
-            amount: 0,
-            uploadedAt: new Date().toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-'),
-            traceId: `tr-9f4${String(seq.current).padStart(3, '0')}`,
-            detailId: 'q1',
-          };
-          // 模拟 Worker 处理：pending → processing → 分流
-          window.setTimeout(() => setList((p) => p.map((d) => (d.id === id ? { ...d, status: 'processing' } : d))), 900);
-          window.setTimeout(() => {
-            const outcomes: DocProcessStatus[] = ['matched', 'review', 'exception'];
-            const final = outcomes[Math.floor(Math.random() * outcomes.length)];
-            setList((p) =>
-              p.map((d) =>
-                d.id === id
-                  ? {
-                      ...d,
-                      status: final,
-                      vendor: '上海岑川商贸有限公司',
-                      amount: 107168.54,
-                    }
-                  : d,
-              ),
-            );
-            message.success(`${f.name} 处理完成：${STATUS_LABEL[final]}`);
-          }, 3200);
-          return [doc, ...prev];
-        });
-      });
   };
 
   /* ---------- 筛选 ---------- */
@@ -223,7 +204,29 @@ export default function Documents() {
     message.success(`已将 ${stuckFailed.length} 个异常单据重新入队`);
   };
 
-  const detail = detailId ? getReviewDetail(detailId) : null;
+  /* 详情按行上的 review_queue id 现取。
+     不能回落 mock：回落会把「这张票」的弹层渲染成另一张票的发票号。 */
+  useEffect(() => {
+    if (!detailId) {
+      setDetail(null);
+      return undefined;
+    }
+    let cancelled = false;
+    setDetailLoading(true);
+    fetchReviewDetail(detailId)
+      .then((d) => {
+        if (!cancelled) setDetail(d);
+      })
+      .catch(() => {
+        if (!cancelled) setDetail(null); // 弹错提示由 request() 统一负责
+      })
+      .finally(() => {
+        if (!cancelled) setDetailLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [detailId]);
 
   /**
    * 行点击进详情。
@@ -302,15 +305,17 @@ export default function Documents() {
       fixed: 'right',
       render: (_: unknown, row: ScannedDoc) => (
         <Space size={4}>
-          <Button
-            type="link"
-            size="small"
-            style={{ padding: 0 }}
-            disabled={row.status === 'pending' || row.status === 'processing'}
-            onClick={() => setDetailId(row.detailId ?? 'q1')}
-          >
-            查看结果
-          </Button>
+          <Tooltip title={row.detailId ? '' : '已匹配单据不进复核队列，没有复核详情'}>
+            <Button
+              type="link"
+              size="small"
+              style={{ padding: 0 }}
+              disabled={!row.detailId}
+              onClick={() => setDetailId(row.detailId ?? null)}
+            >
+              查看结果
+            </Button>
+          </Tooltip>
           {row.traceId && (
             <Button type="link" size="small" style={{ padding: 0 }} onClick={() => navigate('/traces')}>
               链路
@@ -351,7 +356,9 @@ export default function Documents() {
           <p className="ant-upload-text" style={{ fontSize: 13 }}>
             点击或拖拽 PDF 到此处上传
           </p>
-          <p className="ant-upload-hint" style={{ fontSize: 12 }}>
+          {/* antd 的 hint 走 45% 透明黑，压在本卡的 AI 浅青底上只有 2.81:1；
+              这行写的是「≤20MB / 异步队列」这类必须看清的约束，改用二级文本变量（5.5:1） */}
+          <p className="ant-upload-hint" style={{ fontSize: 12, color: 'var(--ia-text-2)' }}>
             支持多选 · 单文件 ≤ 20MB · 上传后自动进入 Redis 队列并由 Worker 异步处理
           </p>
         </Dragger>
@@ -363,15 +370,18 @@ export default function Documents() {
                 <Mono style={{ fontSize: 12, width: 220 }} title={f.name}>
                   {f.name}
                 </Mono>
-                <Progress
-                  percent={Math.round(f.percent ?? 0)}
-                  size="small"
-                  style={{ flex: 1, marginBottom: 0 }}
-                  strokeColor={f.status === 'error' ? '#ff4d4f' : 'var(--ia-primary)'}
-                />
-                <span style={{ fontSize: 11, color: 'var(--ia-text-3)', width: 56 }}>
-                  {f.status === 'error' ? '失败' : f.status === 'done' ? '已入队' : '上传中'}
+                {/* fetch 上传拿不到逐字节进度，所以不画假进度条：只报「在飞 / 已入队 / 失败」，
+                    后续的处理进度在下方池子里按状态看 */}
+                <span style={{ flex: 1, fontSize: 12, color: 'var(--ia-text-3)' }}>
+                  {f.status === 'error' ? '上传失败' : f.status === 'done' ? '已入队，等待处理' : '上传中'}
                 </span>
+                {f.status === 'error' ? (
+                  <CloseCircleOutlined style={{ color: 'var(--ia-diff-fg)' }} />
+                ) : f.status === 'done' ? (
+                  <CheckCircleOutlined style={{ color: 'var(--ia-pass-fg)' }} />
+                ) : (
+                  <Spin size="small" />
+                )}
               </div>
             ))}
           </div>
@@ -385,7 +395,7 @@ export default function Documents() {
         title={
           <Space size={8}>
             <span>处理链路</span>
-            <span style={{ fontSize: 11, color: 'var(--ia-text-3)' }}>上传后单据在系统里的完整流向</span>
+            <span style={{ fontSize: 11, color: 'var(--ia-text-2)' }}>上传后单据在系统里的完整流向</span>
           </Space>
         }
         styles={{ body: { padding: 12 } }}
@@ -417,7 +427,7 @@ export default function Documents() {
                   {i > 0 && (
                     <>
                       <span style={{ color: 'var(--ia-ai)', fontSize: 13, lineHeight: 1 }}>→</span>
-                      <span style={{ fontSize: 9, lineHeight: 1.25, textAlign: 'center', color: 'var(--ia-text-3)' }}>
+                      <span style={{ fontSize: 10, lineHeight: 1.25, textAlign: 'center', color: 'var(--ia-text-2)' }}>
                         {s.from}
                       </span>
                     </>
@@ -449,7 +459,8 @@ export default function Documents() {
                     <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: 0.3, color: 'var(--ia-ai-deep)' }}>
                       {s.name}
                     </span>
-                    <span style={{ fontSize: 10, color: 'var(--ia-text-3)' }}>{s.note}</span>
+                    {/* 这一段在 AI 浅底上（--ia-ai-bg），三级文本只有 4.01:1；10px 小字更要提一级 */}
+                    <span style={{ fontSize: 10, color: 'var(--ia-text-2)' }}>{s.note}</span>
                   </header>
 
                   <div style={{ flex: '1 1 auto', padding: '8px 10px' }}>
@@ -540,7 +551,16 @@ export default function Documents() {
             />
           </Col>
           <Col flex="auto" style={{ textAlign: 'right' }}>
-            <Button size="small" icon={<ReloadOutlined />} onClick={() => setList(scannedDocs)}>
+            <Button
+              size="small"
+              icon={<ReloadOutlined />}
+              onClick={() => {
+                setKeyword('');
+                setStatus('全部');
+                setSource(undefined);
+                void reload();
+              }}
+            >
               重置
             </Button>
           </Col>
@@ -549,7 +569,25 @@ export default function Documents() {
 
       {/* ---------- 池子列表 ---------- */}
       <Card className="ia-card" size="small" title="扫描件池" styles={{ body: { padding: 12 } }}>
-        {filtered.length === 0 ? (
+        {loadError && list.length === 0 ? (
+          <Alert
+            type="error"
+            showIcon
+            message="扫描件池加载失败"
+            description={loadError}
+            action={
+              <Button size="small" icon={<ReloadOutlined />} onClick={() => void reload()}>
+                重试
+              </Button>
+            }
+          />
+        ) : loading && list.length === 0 ? (
+          <div style={{ padding: '48px 0', textAlign: 'center' }}>
+            <Spin tip="正在读取扫描件池">
+              <div style={{ minHeight: 120 }} />
+            </Spin>
+          </div>
+        ) : filtered.length === 0 ? (
           <Empty description="暂无单据">
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
               今晚 23:00 定时任务将自动拉取邮箱新附件
@@ -562,6 +600,7 @@ export default function Documents() {
               rowKey="id"
               columns={columns}
               dataSource={filtered}
+              loading={loading}
               pagination={{ pageSize: 10, size: 'small', showTotal: (t) => `共 ${t} 条` }}
               scroll={{ x: 1180 }}
               rowClassName={() => 'ia-row-clickable'}
@@ -580,7 +619,7 @@ export default function Documents() {
             <span style={{ fontSize: 11, color: 'var(--ia-text-3)' }}>发票原图 + 抽取字段 + 匹配结果 + trace 链路</span>
           </Space>
         }
-        open={!!detail}
+        open={detailId !== null}
         onCancel={() => setDetailId(null)}
         footer={
           <Space>
@@ -593,7 +632,20 @@ export default function Documents() {
         width={1180}
         styles={{ body: { padding: 12, height: 660, overflow: 'hidden' } }}
       >
-        {detail && <InvoiceDetailPanel detail={detail} pdfWidth={240} matchWidth={400} />}
+        {detailLoading || !detail ? (
+          <div style={{ height: '100%', display: 'grid', placeItems: 'center' }}>
+            {detailLoading ? (
+              <Space direction="vertical" size={10}>
+                <Spin />
+                <span style={{ fontSize: 12, color: 'var(--ia-text-3)' }}>正在读取单据详情</span>
+              </Space>
+            ) : (
+              <Empty description="详情加载失败，关闭后可重试" />
+            )}
+          </div>
+        ) : (
+          <InvoiceDetailPanel detail={detail} pdfWidth={240} matchWidth={400} />
+        )}
       </Modal>
     </div>
   );
